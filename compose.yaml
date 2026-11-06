@@ -1,0 +1,114 @@
+name: mewmo
+
+x-backend: &backend
+  build: ./backend
+  image: mewmo-api:local
+  env_file: .env
+  environment:
+    DATABASE_URL: postgresql+psycopg://mewmo:${DB_PASSWORD:?Set DB_PASSWORD}@db:5432/mewmo
+    APNS_KEY_PATH: ${APNS_KEY_PATH:-}
+    PYTHONDONTWRITEBYTECODE: "1"
+  restart: unless-stopped
+  read_only: true
+  tmpfs:
+    - /tmp:size=256m,mode=1777
+  volumes:
+    - ./secrets:/run/secrets:ro
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  networks:
+    - app
+    - data
+  depends_on:
+    db:
+      condition: service_healthy
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: mewmo
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD}
+      POSTGRES_DB: mewmo
+    volumes:
+      - database:/var/lib/postgresql/data
+    networks:
+      - data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mewmo -d mewmo"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  migrate:
+    <<: *backend
+    command: ["alembic", "upgrade", "head"]
+    restart: "no"
+
+  api:
+    <<: *backend
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    mem_limit: 768m
+    cpus: 1.5
+    pids_limit: 128
+
+  worker:
+    <<: *backend
+    command: ["python", "-m", "app.worker"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    mem_limit: 256m
+
+  web:
+    build: ./frontend
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${MEWMO_HTTP_PORT:-8092}:80"
+    networks:
+      - app
+    depends_on:
+      api:
+        condition: service_healthy
+
+  backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      PGHOST: db
+      PGUSER: mewmo
+      PGPASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD}
+      PGDATABASE: mewmo
+      BACKUP_INTERVAL_SECONDS: ${BACKUP_INTERVAL_SECONDS:-86400}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-14}
+    entrypoint: ["/bin/sh", "/backup.sh"]
+    volumes:
+      - ./scripts/backup.sh:/backup.sh:ro
+      - ./backups:/backups
+    networks:
+      - data
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  database:
+    name: mewmo_postgres_data
+
+networks:
+  app:
+    name: mewmo_app
+  data:
+    name: mewmo_data
+    internal: true
