@@ -4,16 +4,21 @@ import os
 import threading
 import uuid
 from concurrent.futures import ThreadPoolExecutor
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
 from alembic import command
 from alembic.config import Config
+from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, inspect, select, text
 from sqlalchemy.orm import Session
 
-from app.models import Device, Item, Reminder
+from app.auth import password_hash, token_hash
+from app.config import settings
+from app.database import session
+from app.main import app
+from app.models import Device, Invitation, Item, Reminder, User, now
 from app.reminders import dispatch_one, reconcile
 
 URL = os.getenv("TEST_POSTGRES_URL", "")
@@ -22,7 +27,8 @@ NOW = datetime(2026, 11, 6, 9, tzinfo=UTC)
 
 
 @pytest.fixture
-def postgres():
+def postgres(monkeypatch):
+    monkeypatch.setattr(settings(), "admin_password_hash", password_hash("postgres-test-only"))
     schema = "mewmo_test_" + uuid.uuid4().hex
     root = create_engine(URL)
     with root.begin() as connection:
@@ -45,6 +51,7 @@ def postgres():
 def seed(engine):
     with Session(engine) as db, db.begin():
         item = Item(
+            user_id="00000000-0000-4000-8000-000000000001",
             kind="bill",
             title="Utility",
             payee="Provider",
@@ -59,7 +66,14 @@ def seed(engine):
         db.flush()
         reminder = Reminder(item_id=item.id, rule_key="day:0:09:00", fire_at=NOW, next_attempt_at=NOW)
         db.add(reminder)
-        db.add(Device(platform="ios", endpoint_hash="abc", subscription={"token": "a" * 64}))
+        db.add(
+            Device(
+                user_id=item.user_id,
+                platform="ios",
+                endpoint_hash="abc",
+                subscription={"token": "a" * 64},
+            )
+        )
         db.flush()
         return item.id, reminder.id
 
@@ -72,6 +86,8 @@ def test_alembic_creates_postgres_schema(postgres):
         "devices",
         "deliveries",
         "auth_sessions",
+        "users",
+        "invitations",
     }
     item_id, _ = seed(postgres)
     with Session(postgres) as db:
@@ -119,3 +135,65 @@ def test_payment_commit_cancels_waiting_worker(postgres):
         future.result(timeout=10)
     with Session(postgres) as db:
         assert db.get(Reminder, reminder_id).status == "cancelled"
+
+
+def test_only_one_concurrent_registration_can_redeem_invite(postgres):
+    token = "concurrent-invite-token-" + uuid.uuid4().hex
+    with Session(postgres) as db, db.begin():
+        db.add(
+            Invitation(
+                token_hash=token_hash(token),
+                created_by="00000000-0000-4000-8000-000000000001",
+                expires_at=now() + timedelta(days=7),
+            )
+        )
+
+    def request_session():
+        with Session(postgres) as db:
+            yield db
+
+    app.dependency_overrides[session] = request_session
+    barrier = threading.Barrier(2)
+
+    def register(username):
+        with TestClient(app) as client:
+            barrier.wait(timeout=5)
+            return client.post(
+                "/api/auth/register",
+                json={
+                    "username": username,
+                    "display_name": username,
+                    "password": "test-password-long",
+                    "invite_token": token,
+                },
+            ).status_code
+
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            first, second = pool.submit(register, "first-user"), pool.submit(register, "second-user")
+            assert sorted([first.result(timeout=15), second.result(timeout=15)]) == [201, 400]
+        with Session(postgres) as db:
+            assert len(db.scalars(select(User)).all()) == 2
+            assert db.scalar(select(Invitation)).used_by is not None
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_device_disable_commit_blocks_waiting_push(postgres):
+    _, reminder_id = seed(postgres)
+    ready = threading.Event()
+
+    def worker():
+        with Session(postgres) as db, db.begin():
+            ready.set()
+            dispatch_one(db, reminder_id, lambda *_: pytest.fail("disabled device received a push"), NOW)
+
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        with Session(postgres) as db, db.begin():
+            device = db.scalar(select(Device).with_for_update())
+            future = pool.submit(worker)
+            assert ready.wait(timeout=5)
+            device.active = False
+        future.result(timeout=10)
+    with Session(postgres) as db:
+        assert db.get(Reminder, reminder_id).status == "failed"

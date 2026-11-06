@@ -48,6 +48,20 @@ export type Reminder = {
   }[];
 };
 export type Device = { id: string; platform: string; active: boolean };
+export type User = {
+  id: string;
+  username: string;
+  display_name: string;
+  is_admin: boolean;
+};
+export type Account = { user: User; vapid_public_key: string };
+export type AuthResult = Account & { token: string | null };
+export type Invitation = {
+  id: string;
+  created_at: string;
+  expires_at: string;
+  status: "pending" | "used" | "expired" | "revoked";
+};
 
 export function context() {
   const now = new Date();

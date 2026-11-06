@@ -1058,6 +1058,50 @@ main {
 .signout-settings {
   margin-top: 24px;
 }
+.account-settings {
+  margin-top: 24px;
+}
+.account-card,
+.account-card form,
+.profile > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.account-card label {
+  display: grid;
+  gap: 8px;
+  font-size: 12px;
+  margin: 16px 0;
+}
+.account-card input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #dfe5d6;
+  border-radius: 7px;
+  background: white;
+  padding: 11px;
+  font-size: 16px;
+}
+.account-card form > button,
+.account-card .error {
+  margin-top: 16px;
+}
+.invite-result {
+  margin-top: 20px;
+  padding: 14px;
+  border-radius: 9px;
+  background: var(--mint);
+}
+.invite-result button {
+  margin-top: 12px;
+}
+.invitation-row {
+  flex-wrap: wrap;
+}
+.auth-toggle {
+  margin-top: 20px;
+  width: 100%;
+}
 /* Forms share the same confirmation surface on web and iPhone. */
 dialog {
   border: 1px solid #e5e9df;

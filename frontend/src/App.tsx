@@ -25,13 +25,19 @@ import {
 } from "lucide-react";
 import { api, setToken } from "./api";
 import { Editor } from "./Editor";
-import { enableNotifications } from "./notifications";
+import { AccountSettings } from "./AccountSettings";
+import {
+  clearDisplayedNotifications,
+  enableNotifications,
+} from "./notifications";
 import {
   context,
   fullDate,
   kindName,
   manualDraft,
   money,
+  type Account,
+  type AuthResult,
   type Device,
   type Draft,
   type Item,
@@ -57,8 +63,19 @@ function Brand() {
   );
 }
 
-function Login({ onLogin }: { onLogin: () => void }) {
+function Login({
+  onLogin,
+  invitation,
+}: {
+  onLogin: (result: AuthResult) => void;
+  invitation: string;
+}) {
+  const [register, setRegister] = useState(!!invitation);
+  const [invite, setInvite] = useState(invitation);
+  const [username, setUsername] = useState("");
+  const [name, setName] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmation, setConfirmation] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   async function submit(e: React.FormEvent) {
@@ -66,12 +83,27 @@ function Login({ onLogin }: { onLogin: () => void }) {
     setBusy(true);
     setError("");
     try {
-      const result = await api<{ token: string | null }>("/auth/login", {
-        method: "POST",
-        body: JSON.stringify({ password }),
-      });
-      setToken(result.token);
-      onLogin();
+      if (register && password !== confirmation)
+        throw new Error("Passwords do not match.");
+      let inviteToken = invite.trim();
+      if (inviteToken.includes("#")) {
+        inviteToken =
+          new URLSearchParams(inviteToken.split("#")[1]).get("invite") || "";
+      }
+      const result = await api<AuthResult>(
+        register ? "/auth/register" : "/auth/login",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            username,
+            password,
+            ...(register
+              ? { display_name: name, invite_token: inviteToken }
+              : {}),
+          }),
+        },
+      );
+      onLogin(result);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -116,31 +148,111 @@ function Login({ onLogin }: { onLogin: () => void }) {
             <ShieldCheck size={28} />
           </span>
           <span className="eyebrow">A SPACE THAT’S JUST YOURS</span>
-          <h2>Welcome to Mewmo</h2>
-          <p className="muted">Sign in to take a little off your mind.</p>
+          <h2>
+            {register ? "Create your private account" : "Welcome to Mewmo"}
+          </h2>
+          <p className="muted">
+            {register
+              ? "Join with an invitation from your administrator. Links expire after 7 days and work once."
+              : "Sign in to take a little off your mind."}
+          </p>
+          {register && (
+            <>
+              <label>
+                Invitation link or code
+                <input
+                  required
+                  value={invite}
+                  onChange={(e) => setInvite(e.target.value)}
+                  autoComplete="off"
+                />
+              </label>
+              <label>
+                Your name
+                <input
+                  required
+                  maxLength={80}
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  autoComplete="name"
+                />
+              </label>
+            </>
+          )}
+          <label>
+            Username
+            <input
+              required
+              minLength={3}
+              maxLength={40}
+              autoComplete="username"
+              autoCapitalize="none"
+              spellCheck={false}
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+            />
+          </label>
           <label>
             Your password
             <input
               type="password"
-              autoComplete="current-password"
+              autoComplete={register ? "new-password" : "current-password"}
               required
+              minLength={register ? 12 : 1}
+              maxLength={512}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              autoFocus
             />
           </label>
+          {register && (
+            <>
+              <label>
+                Confirm password
+                <input
+                  type="password"
+                  required
+                  minLength={12}
+                  maxLength={512}
+                  autoComplete="new-password"
+                  aria-describedby="signup-password-hint"
+                  value={confirmation}
+                  onChange={(e) => setConfirmation(e.target.value)}
+                />
+              </label>
+              <small id="signup-password-hint">Use at least 12 characters.</small>
+            </>
+          )}
           {error && (
             <p role="alert" className="error">
               {error}
             </p>
           )}
           <button className="primary" disabled={busy}>
-            {busy ? "Signing in…" : "Come on in"}
+            {busy
+              ? "Please wait..."
+              : register
+                ? "Create account"
+                : "Come on in"}
             <ArrowRight size={18} />
           </button>
           <p className="login-footnote">
-            <ShieldCheck size={14} /> Private by design. Only you have access.
+            <ShieldCheck size={14} /> Your items are private to your account.
           </p>
+          <button
+            type="button"
+            className="text-button auth-toggle"
+            disabled={busy}
+            onClick={() => {
+              setRegister(!register);
+              setError("");
+              setPassword("");
+              setConfirmation("");
+            }}
+          >
+            {register
+              ? "Already have an account? Sign in"
+              : "Have an invitation? Create an account"}
+          </button>
         </form>
       </div>
     </div>
@@ -342,12 +454,108 @@ function ItemDetail({
 }
 
 export default function App() {
-  const [auth, setAuth] = useState<"loading" | "in" | "out">("loading");
+  const [account, setAccount] = useState<Account | null>();
+  const [invitation, setInvitation] = useState(
+    () => new URLSearchParams(location.hash.slice(1)).get("invite") || "",
+  );
+  const initialInvitation = useRef(invitation).current;
+  function notifyOtherTabs() {
+    try {
+      localStorage.setItem("mewmo:auth-event", crypto.randomUUID());
+    } catch {
+      /* Storage may be disabled. */
+    }
+  }
+  const clearAccount = useCallback(() => {
+    setToken(null);
+    setAccount(null);
+    void clearDisplayedNotifications();
+  }, []);
+  useEffect(() => {
+    let live = true;
+    if (initialInvitation) {
+      window.history.replaceState({}, "", location.pathname + location.search);
+      setAccount(null);
+    } else {
+      void api<Account>("/auth/me")
+        .then((value) => {
+          if (live) {
+            setToken(null, value.user.id);
+            setAccount(value);
+          }
+        })
+        .catch(() => {
+          if (live) setAccount(null);
+        });
+    }
+    const storage = (event: StorageEvent) => {
+      if (event.key === "mewmo:auth-event") clearAccount();
+    };
+    const readInvitation = () => {
+      const token = new URLSearchParams(location.hash.slice(1)).get("invite");
+      if (!token) return;
+      clearAccount();
+      setInvitation(token);
+      window.history.replaceState({}, "", location.pathname + location.search);
+    };
+    window.addEventListener("mewmo:unauthorized", clearAccount);
+    window.addEventListener("storage", storage);
+    window.addEventListener("hashchange", readInvitation);
+    return () => {
+      live = false;
+      window.removeEventListener("mewmo:unauthorized", clearAccount);
+      window.removeEventListener("storage", storage);
+      window.removeEventListener("hashchange", readInvitation);
+    };
+  }, [clearAccount, initialInvitation]);
+  if (account === undefined) {
+    return (
+      <div className="loading-page">
+        <Brand />
+        <p>Making a little space...</p>
+      </div>
+    );
+  }
+  if (!account) {
+    return (
+      <Login
+        key={invitation || "login"}
+        invitation={invitation}
+        onLogin={(result) => {
+          setToken(result.token, result.user.id);
+          setInvitation("");
+          setAccount(result);
+          void clearDisplayedNotifications();
+          notifyOtherTabs();
+        }}
+      />
+    );
+  }
+  return (
+    <Workspace
+      key={account.user.id}
+      account={account}
+      onSignOut={async () => {
+        await api("/auth/logout", { method: "POST" });
+        clearAccount();
+        notifyOtherTabs();
+      }}
+    />
+  );
+}
+
+function Workspace({
+  account,
+  onSignOut,
+}: {
+  account: Account;
+  onSignOut: () => Promise<void>;
+}) {
   const [page, setPage] = useState<Page>("overview");
   const [items, setItems] = useState<Item[]>([]);
   const [finished, setFinished] = useState<Item[]>([]);
   const [devices, setDevices] = useState<Device[]>([]);
-  const [vapid, setVapid] = useState("");
+  const vapid = account.vapid_public_key;
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [text, setText] = useState("");
@@ -381,41 +589,16 @@ export default function App() {
     setDevices(registered);
   }, []);
   useEffect(() => {
-    api<{ vapid_public_key: string }>("/auth/me")
-      .then((me) => {
-        setVapid(me.vapid_public_key);
-        setAuth("in");
-      })
-      .catch(() => setAuth("out"));
-    const logout = () => {
-      setAuth("out");
-      setToken(null);
-      setItems([]);
-      setFinished([]);
-      setDraft(null);
-      setSelected(null);
-      setText("");
-      setDevices([]);
-      setToast(null);
-    };
-    window.addEventListener("mewmo:unauthorized", logout);
-    return () => window.removeEventListener("mewmo:unauthorized", logout);
-  }, []);
-  useEffect(() => {
-    if (auth !== "in") return;
     setLoading(true);
     void refresh()
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-    void api<{ vapid_public_key: string }>("/auth/me")
-      .then((me) => setVapid(me.vapid_public_key))
-      .catch((e) => setError(e.message));
     const timer = setInterval(() => {
       setClock(Date.now());
       void refresh().catch((e) => setError(e.message));
     }, 60000);
     return () => clearInterval(timer);
-  }, [auth, refresh]);
+  }, [refresh]);
   useEffect(() => {
     const id = new URLSearchParams(location.search).get("item");
     const found = [...items, ...finished].find((i) => i.id === id);
@@ -637,14 +820,6 @@ export default function App() {
     </div>
   );
 
-  if (auth === "loading")
-    return (
-      <div className="loading-page">
-        <Brand />
-        <p>Making a little space…</p>
-      </div>
-    );
-  if (auth === "out") return <Login onLogin={() => setAuth("in")} />;
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -684,21 +859,17 @@ export default function App() {
             <Settings2 size={18} /> Settings
           </button>
           <div className="profile">
-            <span>Y</span>
+            <span>{account.user.display_name[0].toUpperCase()}</span>
             <div>
-              <strong>Your space</strong>
-              <small>Personal account</small>
+              <strong>{account.user.display_name}</strong>
+              <small>
+                {account.user.is_admin ? "Administrator" : "Personal account"}
+              </small>
             </div>
             <button
               aria-label="Sign out"
               className="icon-button"
-              onClick={() =>
-                void api("/auth/logout", { method: "POST" })
-                  .then(() => {
-                    window.dispatchEvent(new Event("mewmo:unauthorized"));
-                  })
-                  .catch((e) => setError(e.message))
-              }
+              onClick={() => void onSignOut().catch((e) => setError(e.message))}
             >
               <LogOut size={17} />
             </button>
@@ -728,7 +899,9 @@ export default function App() {
               <Bell size={19} />
               {devices.some((d) => d.active) && <i />}
             </button>
-            <span className="avatar">Y</span>
+            <span className="avatar">
+              {account.user.display_name[0].toUpperCase()}
+            </span>
           </div>
         </header>
         <main>
@@ -1249,16 +1422,11 @@ export default function App() {
               </section>
             </div>
           )}
+          {page === "settings" && <AccountSettings account={account} />}
           {page === "settings" && (
             <button
               className="secondary signout-settings"
-              onClick={() =>
-                void api("/auth/logout", { method: "POST" })
-                  .then(() =>
-                    window.dispatchEvent(new Event("mewmo:unauthorized")),
-                  )
-                  .catch((e) => setError(e.message))
-              }
+              onClick={() => void onSignOut().catch((e) => setError(e.message))}
             >
               <LogOut size={16} /> Sign out
             </button>

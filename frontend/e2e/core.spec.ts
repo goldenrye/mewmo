@@ -5,6 +5,7 @@ import process from "node:process";
 test.beforeEach(async ({ page }) => {
   await page.clock.setFixedTime(new Date("2026-11-06T12:00:00"));
   await page.goto("/");
+  await page.getByLabel("Username", { exact: true }).fill("admin");
   await page
     .getByLabel("Your password")
     .fill(process.env.MEWMO_TEST_PASSWORD || "mewmo-local-test");

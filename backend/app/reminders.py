@@ -89,11 +89,25 @@ def dispatch_one(db: Session, reminder_id: str, sender, at: datetime | None = No
     if item.status != "open":
         row.status = "cancelled"
         return
-    devices = db.scalars(select(Device).where(Device.active.is_(True))).all()
+    # The device lock also serializes logout and endpoint reassignment with sends.
+    devices = db.scalars(
+        select(Device)
+        .where(Device.user_id == item.user_id, Device.active.is_(True))
+        .order_by(Device.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    ).all()
     row.attempts += 1
     accepted = (
         db.scalar(
-            select(Delivery.id).where(Delivery.reminder_id == row.id, Delivery.status == "sent").limit(1)
+            select(Delivery.id)
+            .join(Device, Device.id == Delivery.device_id)
+            .where(
+                Delivery.reminder_id == row.id,
+                Delivery.status == "sent",
+                Device.user_id == item.user_id,
+            )
+            .limit(1)
         )
         is not None
     )

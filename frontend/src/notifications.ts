@@ -2,6 +2,20 @@ import { Capacitor } from "@capacitor/core";
 import { PushNotifications } from "@capacitor/push-notifications";
 import { api } from "./api";
 
+export async function clearDisplayedNotifications() {
+  try {
+    if (Capacitor.isNativePlatform()) {
+      await PushNotifications.removeAllDeliveredNotifications();
+    } else if ("serviceWorker" in navigator) {
+      const registration = await navigator.serviceWorker.getRegistration();
+      const notifications = await registration?.getNotifications();
+      notifications?.forEach((notification) => notification.close());
+    }
+  } catch {
+    // Provider-accepted pushes cannot be recalled; local cleanup is best effort.
+  }
+}
+
 export async function enableNotifications(vapid: string) {
   if (Capacitor.isNativePlatform()) {
     let permission = await PushNotifications.checkPermissions();

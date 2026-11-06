@@ -7,6 +7,9 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
     database_url: str = "postgresql+psycopg://mewmo:mewmo@db/mewmo"
     owner_password_hash: str = ""
+    admin_username: str = "admin"
+    admin_password_hash: str = ""
+    public_web_url: str = ""
     cors_origins: str = "http://localhost:5173,capacitor://localhost"
     cookie_secure: bool = True
     apns_key_path: str = ""

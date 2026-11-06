@@ -36,9 +36,32 @@ class Base(DeclarativeBase):
     pass
 
 
+class User(Base):
+    __tablename__ = "users"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    username: Mapped[str] = mapped_column(String(40), unique=True)
+    display_name: Mapped[str] = mapped_column(String(80))
+    password_hash: Mapped[str] = mapped_column(String(256))
+    is_admin: Mapped[bool] = mapped_column(default=False)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now)
+
+
+class Invitation(Base):
+    __tablename__ = "invitations"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now)
+    expires_at: Mapped[datetime] = mapped_column(UTCDateTime)
+    used_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"))
+    used_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    revoked_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+
+
 class Item(Base):
     __tablename__ = "items"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
     kind: Mapped[str] = mapped_column(String(20))
     title: Mapped[str] = mapped_column(String(180))
     payee: Mapped[str | None] = mapped_column(String(180))
@@ -75,8 +98,10 @@ class Reminder(Base):
 class Device(Base):
     __tablename__ = "devices"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
     platform: Mapped[str] = mapped_column(String(12))
-    endpoint_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    endpoint_hash: Mapped[str | None] = mapped_column(String(64), unique=True)
+    client_key_hash: Mapped[str | None] = mapped_column(String(64), index=True)
     subscription: Mapped[dict] = mapped_column(JSON)
     active: Mapped[bool] = mapped_column(default=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now)
@@ -97,4 +122,5 @@ class Delivery(Base):
 class AuthSession(Base):
     __tablename__ = "auth_sessions"
     token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
     expires_at: Mapped[datetime] = mapped_column(UTCDateTime)

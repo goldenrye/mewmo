@@ -15,6 +15,7 @@ NOW = datetime(2026, 11, 6, 16, tzinfo=UTC)
 
 def item(db, kind="bill", due=None, status="open"):
     row = Item(
+        user_id="00000000-0000-4000-8000-000000000001",
         kind=kind,
         title="Electricity",
         payee="Utility",
@@ -105,7 +106,12 @@ def delivery_fixture(db, count=1):
     db.add(reminder)
     devices = []
     for index in range(count):
-        device = Device(platform="ios", endpoint_hash=str(index), subscription={"token": "a" * 64})
+        device = Device(
+            user_id=owner.user_id,
+            platform="ios",
+            endpoint_hash=str(index),
+            subscription={"token": "a" * 64},
+        )
         db.add(device)
         devices.append(device)
     db.commit()

@@ -10,7 +10,7 @@ from app.push import valid_web_endpoint
 def test_auth_required(client):
     client.cookies.clear()
     assert client.get("/api/items").status_code == 401
-    assert client.post("/api/auth/login", json={"password": "wrong"}).status_code == 401
+    assert client.post("/api/auth/login", json={"username": "admin", "password": "wrong"}).status_code == 401
 
 
 def test_csrf_origin_rejected(client):
@@ -23,7 +23,7 @@ def test_native_context_headers_are_allowed(client):
         headers={
             "Origin": "capacitor://localhost",
             "Access-Control-Request-Method": "GET",
-            "Access-Control-Request-Headers": "authorization,x-client-date,x-client-timezone",
+            "Access-Control-Request-Headers": "authorization,x-client-date,x-client-timezone,x-client-key,x-account-id",
         },
     )
     assert response.status_code == 200

@@ -125,4 +125,32 @@ class StateInput(BaseModel):
 
 
 class LoginInput(BaseModel):
+    username: str = Field(min_length=3, max_length=40)
     password: str = Field(min_length=1, max_length=512)
+
+    @field_validator("username")
+    @classmethod
+    def normalize_username(cls, value):
+        value = value.strip().lower()
+        if not re.fullmatch(r"[a-z0-9][a-z0-9_.-]{2,39}", value):
+            raise ValueError("Use 3-40 letters, digits, dots, dashes or underscores for your username")
+        return value
+
+
+class RegisterInput(LoginInput):
+    invite_token: str = Field(min_length=32, max_length=128)
+    display_name: str = Field(min_length=1, max_length=80)
+    password: str = Field(min_length=12, max_length=512)
+
+    @field_validator("display_name")
+    @classmethod
+    def clean_name(cls, value):
+        value = value.strip()
+        if not value:
+            raise ValueError("Enter your name")
+        return value
+
+
+class PasswordInput(BaseModel):
+    current_password: str = Field(min_length=1, max_length=512)
+    new_password: str = Field(min_length=12, max_length=512)

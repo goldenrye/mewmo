@@ -1,6 +1,6 @@
 # Mewmo
 
-A single-owner bill and reminder app. Capture an item, review the draft, confirm it, get reminded, and stop reminders when it is handled.
+An invite-only, multi-user bill and reminder app. Each person has a private account. Capture an item, review the draft, confirm it, get reminded, and stop reminders when it is handled.
 
 ## Stack
 
@@ -19,7 +19,9 @@ A single-owner bill and reminder app. Capture an item, review the draft, confirm
 - Manual create/edit/delete, overdue-first home, search, calendar, one-tap paid/completed, undo, and history.
 - Editable reminder rules; each fire time has a database row and per-device delivery audit.
 - A 60-second worker scan with retry, cancellation, rescheduling, and future-only restoration on undo.
-- Password-protected single-owner access, hashed/revocable sessions, origin checks, and login rate limits.
+- Username/password accounts, hashed/revocable sessions, origin checks, and login rate limits.
+- Administrator-created, single-use invitation links that expire after seven days, with revocation and status tracking.
+- Per-user items, history, duplicate detection, reminder audit, and notification devices. Administrators cannot read other users' items through the app.
 
 Parsing is deliberately conservative, not an open-ended AI assistant. Common relative dates, explicit dates, weekdays, numeric Chinese month/day dates, Chinese times, and labelled invoice fields are supported. Ambiguous currencies and missing information require review. For example, `这个月水电 120 刀，已付` produces a paid bill draft with amount 120, a currency warning, and a missing due date to fill in. A statement about "this month" does not invent a deadline.
 
@@ -46,7 +48,9 @@ Example `backend/.env`, using a NEW Mewmo-only local database:
 
 ```dotenv
 DATABASE_URL=postgresql+psycopg://mewmo:YOUR_URL_SAFE_PASSWORD@127.0.0.1:5432/mewmo
-OWNER_PASSWORD_HASH='scrypt$YOUR_SALT$YOUR_HASH'
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD_HASH='scrypt$YOUR_SALT$YOUR_HASH'
+PUBLIC_WEB_URL=http://localhost:5173
 COOKIE_SECURE=false
 CORS_ORIGINS=http://localhost:5173,capacitor://localhost
 ```
@@ -62,9 +66,39 @@ npm ci
 npm run dev
 ```
 
-Open `http://localhost:5173`. Vite proxies `/api` to FastAPI. The app starts with an empty list, not demo bills.
+Open `http://localhost:5173` and sign in as `admin` with the password used to generate the hash. Vite proxies `/api` to FastAPI. The app starts with an empty list, not demo bills.
 
-For an entirely disposable browser preview, `backend/tests/run_e2e.py` starts a SQLite-backed API on port 8000 with the **test-only** password `mewmo-local-test`. It removes its temporary database when stopped. This is not a production mode and does not run a reminder worker.
+For an entirely disposable browser preview, `backend/tests/run_e2e.py` starts a SQLite-backed API on port 8000 with username `admin` and the **test-only** password `mewmo-local-test`. It removes its temporary database when stopped. This is not a production mode and does not run a reminder worker.
+
+## Accounts and Invitations
+
+The first migration to the multi-user schema creates an administrator named `admin` (override with `ADMIN_USERNAME` before migrating). It uses `ADMIN_PASSWORD_HASH`, or the existing `OWNER_PASSWORD_HASH` when upgrading an older installation. There is no default production password and no public signup. These environment settings bootstrap the account only; subsequent restarts or migrations do not reset its password.
+
+As administrator, open **Settings > Invite people > Create invite link**. Copy the displayed link and share it privately. Each link:
+
+- Expires exactly seven days after creation, using server time.
+- Can create one ordinary user account, never another administrator.
+- Is stored only as a hash; the full link is shown only when created.
+- Can be revoked in Settings until it is used. Revoking an invite does not delete an existing account.
+
+The recipient opens the link on the web, chooses a unique username and a password of at least 12 characters, and gets an empty private space. On iPhone, they can instead choose **Have an invitation? Create an account** and paste the link. Usernames are case-insensitive and allow 3-40 letters, digits, dots, underscores, or dashes. Users can change their password in Settings; doing so revokes their other sessions.
+
+Set `PUBLIC_WEB_URL` to the exact web origin, including a custom HTTPS port if applicable. For this server, use `https://mewmo.rental-mgmt.us:9443`. Invitation tokens are in the URL fragment, not request paths or query strings. Anyone holding an unused invitation can redeem it, so do not post links publicly. Email delivery, email verification, and self-service forgotten-password recovery are not included.
+
+### Upgrade an Existing Installation
+
+Take and verify a Mewmo database backup first. Keep the current password hash, and add `PUBLIC_WEB_URL` to `.env`. Stop old API/worker processes before changing the schema; do not run old and new versions together:
+
+```bash
+docker compose stop web api worker
+docker compose build
+docker compose run --rm migrate
+docker compose up -d
+```
+
+Migration `0002` assigns all existing items and device/delivery history to the administrator without deleting bills or reminder audit. It invalidates old sessions and disables old notification registrations, which did not have an installation binding. Sign in with username `admin` and your existing password, then re-enable notifications on each device. Rebuild/reinstall the iPhone client to get username sign-in.
+
+Downgrading this migration is intentionally blocked: merging private accounts into one owner would disclose users' data. To roll back, restore a verified pre-upgrade backup and matching application version with the worker stopped.
 
 ## Production Deployment
 
@@ -135,7 +169,7 @@ npm run ios:open
 
 Select your Apple Development Team, choose a unique bundle ID if necessary, and ensure that APNs is enabled for that ID and signing profile. Match `APNS_TOPIC` on the server. Run on a physical iPhone or archive for TestFlight.
 
-The client is bundled locally, not loaded from a remote `server.url`. Native API access requires HTTPS and refuses a relative/plain-HTTP API URL. Native session tokens are kept only in memory, so a cold app launch requires sign-in again. Notification registration remains on the server independently of the login session; use the device's **Disable** button to stop deliveries to it.
+The client is bundled locally, not loaded from a remote `server.url`. Native API access requires HTTPS and refuses a relative/plain-HTTP API URL. Native session tokens are kept only in memory, so a cold app launch requires sign-in again. Notification registration remains on the server independently of session expiry. Explicit sign-out or signing into another account disables the previous account's registrations on that installation; re-enable notifications after signing in. Other devices are unaffected. Use a device's **Disable** button to stop its deliveries remotely.
 
 Camera/photo library descriptions support importing bill photos. Dictation remains entirely owned by the iOS keyboard. A file import never marks anything paid, even if the document contains instructions to do so.
 
@@ -164,6 +198,8 @@ Device-level acceptance is recorded so an ordinary retry does not resend to alre
 - Full source text and filenames are not saved. Account-number-like sequences in titles/payees are redacted to their last four digits.
 - Deleting an item cancels pending reminders and redacts its personal fields. Minimal tombstone/delivery audit rows remain. Historical database backups retain their earlier snapshots until expiration.
 - Push subscriptions are sensitive credentials stored in the private database. Keep host disks/backups encrypted and restrict server access.
+- The client stores a random installation identifier, not an account password or session token, to detach notifications on sign-out/account switching. Clearing browser storage may lose that identifier; disable the old device registration from Settings. Already accepted/in-flight notifications cannot be recalled, and displayed-notification cleanup is best effort.
+- Account isolation is enforced by the API and worker, including administrator requests. Server/database operators and anyone with backup access can still access stored data; this is not end-to-end encryption.
 - No offline item cache or automatic offline submission is provided; an unavailable server produces an error.
 
 ### Backups
@@ -210,11 +246,15 @@ npm run test:e2e
 
 The browser suite exercises the real API on desktop and iPhone-sized Chromium. This is responsive-layout testing, not a substitute for physical iPhone tests.
 
+Account tests cover cross-user reads/mutations, private duplicate checks, notification ownership and reassignment, password/session revocation, invite expiry/revocation/reuse, legacy-data migration, and concurrent invite redemption against PostgreSQL.
+
 Required regression: with local date `2026-11-06`, `后天9点有医生预约` creates only an appointment draft titled `医生预约`, for **Sunday 2026-11-08 at 09:00**. The confirmation UI displays that full date and time.
 
 Before production use, verify physical-device APNs and browser push acceptance, original-file cleanup in the deployed container, a backup restore, and delivery latency with a real reminder. Docker and Apple signing/push credentials are required for those deployment checks.
 
 ### Verification in This Workspace
+
+The multi-user update passed 91 backend tests (including the isolated PostgreSQL concurrency suite), 9 client unit tests, and 14 desktop/iPhone-sized browser tests. The final client build, Capacitor sync, backend lint, and patch checks passed. Three real-OCR tests remain skipped. This update has not been deployed to production.
 
 On 2026-11-06: 71 backend tests, 6 client unit tests, and 8 browser tests passed. Real PostgreSQL migration/concurrency tests used an isolated PostgreSQL 18.6 test cluster; the production Compose target remains PostgreSQL 16. The Vite production build, Capacitor sync, Swift syntax checks, plist validation, and Compose YAML/isolation checks passed. The production client dependency audit reported no known vulnerabilities.
 
