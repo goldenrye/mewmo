@@ -1,7 +1,7 @@
 import type { CapacitorConfig } from "@capacitor/cli";
 
 const config: CapacitorConfig = {
-  appId: "app.mewmo.personal",
+  appId: "com.jpi.mewmo",
   appName: "Mewmo",
   webDir: "dist",
   ios: { contentInset: "never" },

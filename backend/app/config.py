@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     apns_key_path: str = ""
     apns_key_id: str = ""
     apns_team_id: str = ""
-    apns_topic: str = "app.mewmo.personal"
+    apns_topic: str = "com.jpi.mewmo"
     apns_sandbox: bool = False
     vapid_private_key: str = ""
     vapid_public_key: str = ""
