@@ -90,6 +90,16 @@ Use a dedicated Mewmo hostname behind the server's HTTPS edge. `deploy/nginx-edg
 
 **Do not blindly bind port 80/443 or replace rental-mgmt's proxy configuration.** Its existing deployment may already own those ports. If there is no independent host-level edge, choose a separate IP/HTTPS port or plan an edge migration before deploying Mewmo. No such server changes are performed by this repository.
 
+On the current host, rental-mgmt owns 80/443 and canddle owns 8443, so Mewmo runs its own edge at `https://mewmo.rental-mgmt.us:9443` (`deploy/compose.edge.yaml`, enabled with `COMPOSE_FILE=compose.yaml:deploy/compose.edge.yaml` in `.env`). Set `CORS_ORIGINS` and the iPhone app's `VITE_API_BASE_URL` with the `:9443` port included. The certificate comes from the host's certbot. rental-mgmt's nginx serves `/var/www/certbot` for any hostname on port 80, so validation needs no rental-mgmt changes:
+
+```bash
+sudo certbot certonly --webroot -w /var/www/certbot -d mewmo.rental-mgmt.us \
+  --deploy-hook "sh -c 'cd /home/ubuntu/mewmo && docker compose exec -T edge nginx -s reload'"
+docker compose up -d edge
+```
+
+This needs a DNS A record for the hostname and inbound 9443 open in the AWS security group. Renewals also run the host's existing hook, which gracefully reloads rental-mgmt's nginx.
+
 The Mewmo Compose stack does not join any rental-mgmt network or reuse its database, backup storage, credentials, ports, or Compose files. A shared TLS edge, when available, only routes traffic; it is not a shared application stack.
 
 ### Push Configuration

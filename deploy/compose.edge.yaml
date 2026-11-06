@@ -1,0 +1,21 @@
+# Publishes Mewmo over HTTPS on its own port, using a certificate from the
+# host's certbot. Enable with COMPOSE_FILE=compose.yaml:deploy/compose.edge.yaml.
+#
+# Only Mewmo's certificate is mounted, not all of /etc/letsencrypt, so this
+# container cannot read the private keys of other services on the host.
+services:
+  edge:
+    image: nginx:stable-alpine
+    restart: unless-stopped
+    ports:
+      - "${MEWMO_HTTPS_PORT:-9443}:443"
+    volumes:
+      - ./deploy/nginx-edge.conf:/etc/nginx/conf.d/default.conf:ro
+      - /etc/letsencrypt/live/mewmo.rental-mgmt.us:/etc/letsencrypt/live/mewmo.rental-mgmt.us:ro
+      - /etc/letsencrypt/archive/mewmo.rental-mgmt.us:/etc/letsencrypt/archive/mewmo.rental-mgmt.us:ro
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - app
+    depends_on:
+      - web
