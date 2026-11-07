@@ -1,0 +1,3 @@
+"NSCameraUsageDescription" = "Take a photo of a bill to prepare a draft. The original is discarded after parsing.";
+"NSPhotoLibraryUsageDescription" = "Choose a bill image to prepare a draft.";
+"NSFaceIDUsageDescription" = "Use Face ID to securely sign in to your Mewmo account on this iPhone.";

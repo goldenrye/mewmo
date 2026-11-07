@@ -1,11 +1,33 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { api, setToken } from "./api";
 import { context } from "./types";
+import { setLanguage } from "./i18n";
 
 afterEach(() => {
+  setLanguage("system");
   setToken(null);
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+});
+
+it("localizes validation field names and sends the selected locale", async () => {
+  setLanguage("zh-CN");
+  const fetch = vi
+    .spyOn(globalThis, "fetch")
+    .mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          detail: [{ loc: ["body", "username"], msg: "Field required" }],
+        }),
+        { status: 422 },
+      ),
+    );
+  await expect(
+    api("/auth/login", { method: "POST", body: "{}" }),
+  ).rejects.toThrow("用户名: 此项为必填项");
+  expect(
+    (fetch.mock.calls[0][1]?.headers as Headers).get("Accept-Language"),
+  ).toBe("zh-CN");
 });
 
 it("attaches local date and IANA timezone to every request", async () => {

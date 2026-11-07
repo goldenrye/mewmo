@@ -22,6 +22,11 @@ public class BiometricSessionPlugin: CAPPlugin, CAPBridgedPlugin {
     ]
     private let queue = DispatchQueue(label: "com.mewmo.biometric-session")
 
+    private func prompt(_ call: CAPPluginCall, english: String, chinese: String) -> String {
+        let language = call.getString("language") ?? Locale.preferredLanguages.first ?? "en"
+        return language.lowercased().hasPrefix("zh") ? chinese : english
+    }
+
     private func server(_ call: CAPPluginCall) -> String? {
         guard let value = call.getString("server"), let url = URL(string: value),
               url.scheme == "https", url.host != nil, url.user == nil,
@@ -79,7 +84,8 @@ public class BiometricSessionPlugin: CAPPlugin, CAPBridgedPlugin {
             return
         }
         context.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics,
-                               localizedReason: "Enable biometric sign-in for Mewmo") { success, _ in
+                               localizedReason: prompt(call, english: "Enable biometric sign-in for Mewmo",
+                                                       chinese: "为 Mewmo 启用生物识别登录")) { success, _ in
             guard success else {
                 call.reject("Biometric setup was not completed. Your password still works.", "AUTH_FAILED")
                 return
@@ -115,7 +121,7 @@ public class BiometricSessionPlugin: CAPPlugin, CAPBridgedPlugin {
         guard let server = server(call) else { return }
         queue.async {
             let context = LAContext()
-            context.localizedReason = "Sign in to Mewmo"
+            context.localizedReason = self.prompt(call, english: "Sign in to Mewmo", chinese: "登录 Mewmo")
             context.localizedFallbackTitle = ""
             // A fresh context and Keychain ACL enforce biometrics on every retrieval.
             var request = self.query(server)

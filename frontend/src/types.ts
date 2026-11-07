@@ -1,3 +1,5 @@
+import { getLocale, t } from "./i18n";
+
 export type Kind = "bill" | "appointment" | "dated_item";
 export type State = "open" | "paid" | "completed";
 export type Rule = {
@@ -116,16 +118,25 @@ export function manualDraft(kind: Kind = "bill"): Draft {
 }
 
 export function fullDate(day: string | null, time: string | null): string {
-  if (!day || !time) return "Choose a date and time to continue";
+  if (!day || !time) return t("Choose a date and time to continue");
   const d = new Date(`${day}T12:00:00Z`);
-  if (Number.isNaN(d.getTime())) return "Choose a valid date";
-  return `${d.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric", timeZone: "UTC" })} at ${time}`;
+  if (Number.isNaN(d.getTime())) return t("Choose a valid date");
+  return t("{date} at {time}", {
+    date: d.toLocaleDateString(getLocale(), {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      timeZone: "UTC",
+    }),
+    time,
+  });
 }
 
 export function money(item: Pick<Item, "amount" | "currency">) {
   if (item.amount === null || !item.currency) return "";
   try {
-    return new Intl.NumberFormat("en-US", {
+    return new Intl.NumberFormat(getLocale(), {
       style: "currency",
       currency: item.currency,
     }).format(Number(item.amount));

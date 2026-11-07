@@ -95,6 +95,7 @@ it("saves only the current token and account to the server-scoped native bridge"
     server,
     token: "protected-token",
     userId: user.id,
+    language: "en-US",
   });
   expect(localStorage.setItem).not.toHaveBeenCalled();
 });
@@ -200,4 +201,17 @@ it("retains cookie authentication for the website", async () => {
     `${server}/auth/me`,
     expect.objectContaining({ credentials: "include" }),
   );
+});
+
+it("passes the selected language to native setup and unlock prompts", async () => {
+  const { setLanguage } = await import("./i18n");
+  setLanguage("zh-CN");
+  auth.setToken("protected-token", user.id);
+  await biometric.enableBiometrics();
+  expect(mocks.store).toHaveBeenCalledWith(
+    expect.objectContaining({ language: "zh-CN" }),
+  );
+  auth.setToken(null);
+  await biometric.signInWithBiometrics();
+  expect(mocks.restore).toHaveBeenCalledWith({ server, language: "zh-CN" });
 });

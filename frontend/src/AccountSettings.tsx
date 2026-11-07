@@ -1,3 +1,5 @@
+import { getLocale, messageText, t } from "./i18n";
+import { LanguageSelector } from "./LanguageSelector";
 import { useEffect, useState } from "react";
 import { Copy, Link } from "lucide-react";
 import { api } from "./api";
@@ -16,7 +18,7 @@ export function AccountSettings({ account }: { account: Account }) {
     setError("");
     setMessage("");
     if (password !== confirmation) {
-      setError("Passwords do not match.");
+      setError(t("Passwords do not match."));
       return;
     }
     setBusy(true);
@@ -31,7 +33,7 @@ export function AccountSettings({ account }: { account: Account }) {
       setCurrent("");
       setPassword("");
       setConfirmation("");
-      setMessage("Password updated. Other sessions have been signed out.");
+      setMessage(t("Password updated. Other sessions have been signed out."));
     } catch (error) {
       setError((error as Error).message);
     } finally {
@@ -41,16 +43,17 @@ export function AccountSettings({ account }: { account: Account }) {
   return (
     <div className="settings-grid account-settings">
       <section className="settings-card account-card">
-        <h2>Your account</h2>
+        <h2>{t("Your account")}</h2>
         <p className="muted">
           {account.user.display_name} · @{account.user.username}
         </p>
+        <LanguageSelector />
         <BiometricSettings />
         <details className="disclosure">
-          <summary>Change password</summary>
+          <summary>{t("Change password")}</summary>
           <form onSubmit={changePassword}>
             <label>
-              Current password
+              {t("Current password")}
               <input
                 type="password"
                 required
@@ -61,7 +64,7 @@ export function AccountSettings({ account }: { account: Account }) {
               />
             </label>
             <label>
-              New password
+              {t("New password")}
               <input
                 type="password"
                 required
@@ -73,7 +76,7 @@ export function AccountSettings({ account }: { account: Account }) {
               />
             </label>
             <label>
-              Confirm new password
+              {t("Confirm new password")}
               <input
                 type="password"
                 required
@@ -84,15 +87,15 @@ export function AccountSettings({ account }: { account: Account }) {
                 onChange={(e) => setConfirmation(e.target.value)}
               />
             </label>
-            <p className="muted small">Use at least 12 characters.</p>
+            <p className="muted small">{t("Use at least 12 characters.")}</p>
             {error && (
               <p className="error" role="alert">
-                {error}
+                {messageText(error)}
               </p>
             )}
-            {message && <p role="status">{message}</p>}
+            {message && <p role="status">{messageText(message)}</p>}
             <button className="secondary" disabled={busy}>
-              {busy ? "Updating..." : "Update password"}
+              {busy ? t("Updating...") : t("Update password")}
             </button>
           </form>
         </details>
@@ -160,15 +163,16 @@ function Invitations() {
   }
   return (
     <section className="settings-card account-card">
-      <h2>Invite people</h2>
-      <p className="muted">One person per link. Expires in 7 days.</p>
+      <h2>{t("Invite people")}</h2>
+      <p className="muted">{t("One person per link. Expires in 7 days.")}</p>
       <button className="primary" disabled={busy} onClick={() => void create()}>
-        <Link size={16} /> {busy ? "Please wait..." : "Create invite link"}
+        <Link size={16} />{" "}
+        {busy ? t("Please wait...") : t("Create invite link")}
       </button>
       {link && (
         <div className="invite-result">
           <label>
-            Invitation link
+            {t("Invitation link")}
             <input
               readOnly
               value={link.url}
@@ -176,8 +180,9 @@ function Invitations() {
             />
           </label>
           <p className="small muted">
-            Expires {new Date(link.expires_at).toLocaleString()}. Copy before
-            leaving this page.
+            {t("Expires {date}. Copy before leaving this page.", {
+              date: new Date(link.expires_at).toLocaleString(getLocale()),
+            })}
           </p>
           <button
             className="secondary"
@@ -187,42 +192,56 @@ function Invitations() {
                 .then(() => setCopied(true))
                 .catch(() =>
                   setError(
-                    "Clipboard unavailable. Select the invitation link to copy it.",
+                    t(
+                      "Clipboard unavailable. Select the invitation link to copy it.",
+                    ),
                   ),
                 );
             }}
           >
             <Copy size={16} />
-            {copied ? "Copied" : "Copy invite link"}
+            {copied ? t("Copied") : t("Copy invite link")}
           </button>
         </div>
       )}
       {error && (
         <p className="error" role="alert">
-          {error}
+          {messageText(error)}
         </p>
       )}
       <details className="disclosure">
-        <summary>Manage invitations ({invitations.length})</summary>
+        <summary>
+          {t("Manage invitations ({count})", { count: invitations.length })}
+        </summary>
         {!invitations.length && (
-          <p className="empty-inline">No invitations yet.</p>
+          <p className="empty-inline">{t("No invitations yet.")}</p>
         )}
         {invitations.map((invitation) => (
           <div className="delivery-row invitation-row" key={invitation.id}>
             <div>
-              <strong>Invitation {invitation.id.slice(0, 8)}</strong>
+              <strong>
+                {t("Invitation {id}", { id: invitation.id.slice(0, 8) })}
+              </strong>
               <small>
-                Expires {new Date(invitation.expires_at).toLocaleString()}
+                {t("Expires {date}", {
+                  date: new Date(invitation.expires_at).toLocaleString(
+                    getLocale(),
+                  ),
+                })}
               </small>
             </div>
-            <span className="status-pill">{invitation.status}</span>
+            <span className="status-pill">
+              {invitation.status === "pending" && getLocale() === "zh-CN"
+                ? t("Awaiting signup")
+                : t(invitation.status)}
+            </span>
             {invitation.status === "pending" && (
               <button
                 className="text-button"
                 disabled={busy}
                 onClick={() => void revoke(invitation.id)}
               >
-                Revoke
+                {t("Revoke")}
               </button>
             )}
           </div>

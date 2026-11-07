@@ -1,6 +1,7 @@
 import { Capacitor, registerPlugin } from "@capacitor/core";
 import { api, apiBase, ApiError, currentSession, setToken } from "./api";
 import type { Account, AuthResult } from "./types";
+import { getLocale } from "./i18n";
 
 export type BiometricStatus = {
   available: boolean;
@@ -14,9 +15,11 @@ interface BiometricBridge {
     server: string;
     token: string;
     userId: string;
+    language: string;
   }): Promise<void>;
   restore(options: {
     server: string;
+    language: string;
   }): Promise<{ token: string; userId: string }>;
   clear(options: { server: string }): Promise<void>;
 }
@@ -65,6 +68,7 @@ export async function enableBiometrics(): Promise<void> {
       server: apiBase,
       token: session.token!,
       userId: session.userId!,
+      language: getLocale(),
     });
     if (currentSession().version !== session.version) {
       await bridge.clear({ server: apiBase });
@@ -78,7 +82,10 @@ export async function signInWithBiometrics(): Promise<AuthResult> {
     throw new Error("Use your password to sign in on this device.");
   const version = currentSession().version;
   await mutations.catch(() => {});
-  const saved = await bridge.restore({ server: apiBase });
+  const saved = await bridge.restore({
+    server: apiBase,
+    language: getLocale(),
+  });
   if (currentSession().version !== version)
     throw new Error("Account changed. Sign-in cancelled.");
   if (!saved.token || !saved.userId)

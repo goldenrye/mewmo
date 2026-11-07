@@ -1,5 +1,6 @@
 import { Capacitor } from "@capacitor/core";
 import { context } from "./types";
+import { fieldName, getLocale, messageText, t } from "./i18n";
 
 export const apiBase = (import.meta.env.VITE_API_BASE_URL || "/api").replace(
   /\/$/,
@@ -66,6 +67,7 @@ export async function api<T>(
   headers.set("X-Client-Date", local.local_date);
   headers.set("X-Client-Timezone", local.timezone);
   headers.set("X-Client-Key", clientKey());
+  headers.set("Accept-Language", getLocale());
   if (accountId) headers.set("X-Account-ID", accountId);
   if (options.body && !(options.body instanceof Blob))
     headers.set("Content-Type", "application/json");
@@ -81,7 +83,9 @@ export async function api<T>(
   if (!response.ok) {
     const body = await response
       .json()
-      .catch(() => ({ detail: `Request failed (${response.status})` }));
+      .catch(() => ({
+        detail: t("Request failed ({status})", { status: response.status }),
+      }));
     const detail = Array.isArray(body.detail)
       ? body.detail
           .map((e: { msg: string; loc?: (string | number)[] }) => {
@@ -91,7 +95,9 @@ export async function api<T>(
                   !["body", "query", "path", "header"].includes(String(part)),
               )
               .join(".");
-            return field ? `${field}: ${e.msg}` : e.msg;
+            return field
+              ? `${fieldName(field)}: ${messageText(e.msg)}`
+              : messageText(e.msg);
           })
           .join(". ")
       : body.detail;

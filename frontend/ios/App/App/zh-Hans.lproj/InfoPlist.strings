@@ -1,0 +1,3 @@
+"NSCameraUsageDescription" = "拍摄账单以生成草稿，原始照片会在解析后丢弃。";
+"NSPhotoLibraryUsageDescription" = "选择账单图片以生成草稿。";
+"NSFaceIDUsageDescription" = "使用面容 ID 在此 iPhone 上安全登录你的 Mewmo 账户。";

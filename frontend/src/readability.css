@@ -8,6 +8,34 @@
 body {
   line-height: 1.5;
 }
+html:lang(zh-CN) body {
+  font-family: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+}
+.language-selector,
+.account-card label.language-selector,
+.login-form label.language-selector {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 16px 0;
+  font-size: 1rem;
+}
+.language-selector select {
+  min-height: 46px;
+  min-width: 140px;
+  max-width: 70%;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--green);
+  background: white;
+  font-size: 1rem;
+}
+.login-form .language-selector {
+  margin: 0 0 24px;
+}
 h1,
 h2,
 h3 {
@@ -465,10 +493,9 @@ summary:focus-visible {
   border-bottom: 1px solid var(--line);
 }
 .rule-row:has(input[type="time"]) {
-  grid-template-columns: minmax(0, 1fr) minmax(70px, 0.5fr) minmax(
-      110px,
-      0.75fr
-    ) 44px;
+  grid-template-columns:
+    minmax(0, 1fr) minmax(70px, 0.5fr) minmax(110px, 0.75fr)
+    44px;
 }
 .editor-dialog .rule-row input,
 .editor-dialog .rule-row select {

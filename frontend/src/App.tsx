@@ -1,3 +1,12 @@
+import {
+  deliveryMessage,
+  getLocale,
+  messageText,
+  t,
+  useLanguage,
+} from "./i18n";
+import { LanguageSelector } from "./LanguageSelector";
+import { useFormLanguage } from "./formLanguage";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Capacitor } from "@capacitor/core";
 import { PushNotifications } from "@capacitor/push-notifications";
@@ -115,7 +124,7 @@ function Login({
     setError("");
     try {
       if (register && password !== confirmation)
-        throw new Error("Passwords do not match.");
+        throw new Error(t("Passwords do not match."));
       let inviteToken = invite.trim();
       if (inviteToken.includes("#")) {
         inviteToken =
@@ -137,7 +146,7 @@ function Login({
       // Password/account switching never inherits another account's saved session.
       await clearBiometrics();
       if (currentSession().version !== version)
-        throw new Error("Account changed. Please try again.");
+        throw new Error(t("Account changed. Please try again."));
       onLogin(result);
     } catch (e) {
       setError((e as Error).message);
@@ -149,15 +158,18 @@ function Login({
     <div className="login-page">
       <div className="login-story">
         <Brand />
-        <p>Bills and reminders, in one place.</p>
+        <p>{t("Bills and reminders, in one place.")}</p>
       </div>
       <div className="login-form">
+        <LanguageSelector />
         <form onSubmit={submit}>
           <h2>
-            {register ? "Create your private account" : "Welcome to Mewmo"}
+            {register
+              ? t("Create your private account")
+              : t("Welcome to Mewmo")}
           </h2>
           {register && (
-            <p className="muted">An invitation is required to join.</p>
+            <p className="muted">{t("An invitation is required to join.")}</p>
           )}
           {!register && biometric?.enabled && (
             <button
@@ -167,13 +179,13 @@ function Login({
               onClick={() => void biometricLogin()}
             >
               <ScanFace size={20} />
-              Sign in with {biometric.label}
+              {t("Sign in with {method}", { method: t(biometric.label) })}
             </button>
           )}
           {register && (
             <>
               <label>
-                Invitation link or code
+                {t("Invitation link or code")}
                 <input
                   required
                   value={invite}
@@ -182,7 +194,7 @@ function Login({
                 />
               </label>
               <label>
-                Your name
+                {t("Your name")}
                 <input
                   required
                   maxLength={80}
@@ -194,7 +206,7 @@ function Login({
             </>
           )}
           <label>
-            Username
+            {t("Username")}
             <input
               required
               minLength={3}
@@ -207,7 +219,7 @@ function Login({
             />
           </label>
           <label>
-            Your password
+            {t("Your password")}
             <input
               type="password"
               autoComplete={register ? "new-password" : "current-password"}
@@ -221,7 +233,7 @@ function Login({
           {register && (
             <>
               <label>
-                Confirm password
+                {t("Confirm password")}
                 <input
                   type="password"
                   required
@@ -234,17 +246,21 @@ function Login({
                 />
               </label>
               <small id="signup-password-hint">
-                Use at least 12 characters.
+                {t("Use at least 12 characters.")}
               </small>
             </>
           )}
           {error && (
             <p role="alert" className="error">
-              {error}
+              {messageText(error)}
             </p>
           )}
           <button className="primary" disabled={busy}>
-            {busy ? "Please wait..." : register ? "Create account" : "Sign in"}
+            {busy
+              ? t("Please wait...")
+              : register
+                ? t("Create account")
+                : t("Sign in")}
             <ArrowRight size={18} />
           </button>
           <button
@@ -258,7 +274,9 @@ function Login({
               setConfirmation("");
             }}
           >
-            {register ? "Back to sign in" : "Have an invitation? Join Mewmo"}
+            {register
+              ? t("Back to sign in")
+              : t("Have an invitation? Join Mewmo")}
           </button>
         </form>
       </div>
@@ -333,7 +351,7 @@ function ItemDetail({
           })()}
         </span>
         <button
-          aria-label="Close details"
+          aria-label={t("Close details")}
           className="icon-button"
           onClick={onClose}
         >
@@ -341,7 +359,7 @@ function ItemDetail({
         </button>
       </div>
       <span className="eyebrow">
-        {kindName[item.kind]} · {item.status}
+        {t(kindName[item.kind])} · {t(item.status)}
       </span>
       <h2>{item.title}</h2>
       {item.kind === "bill" && (
@@ -358,8 +376,9 @@ function ItemDetail({
       </div>
       {item.payee && (
         <p className="muted">
-          Payee: {item.payee}
-          {item.account_last4 && ` · Account ending ${item.account_last4}`}
+          {t("Payee: {payee}", { payee: item.payee })}
+          {item.account_last4 &&
+            ` · ${t("Account ending {digits}", { digits: item.account_last4 })}`}
         </p>
       )}
       <div className="detail-actions">
@@ -370,35 +389,36 @@ function ItemDetail({
         >
           <Check size={16} />
           {item.status !== "open"
-            ? "Reopen item"
+            ? t("Reopen item")
             : item.kind === "bill"
-              ? "Mark as paid"
-              : "Mark complete"}
+              ? t("Mark as paid")
+              : t("Mark complete")}
         </button>
         <button className="secondary" onClick={onEdit}>
-          Edit item
+          {t("Edit item")}
         </button>
       </div>
       <section className="delivery-list">
         <div className="section-heading">
           <h3>
-            <Bell size={17} /> Reminder delivery
+            <Bell size={17} />
+            {t("Reminder delivery")}
           </h3>
         </div>
         <p className="muted small">
-          Sent means accepted by the push service, not read.
+          {t("Sent means accepted by the push service, not read.")}
         </p>
-        {loading && <p className="muted">Loading reminder status…</p>}
+        {loading && <p className="muted">{t("Loading reminder status…")}</p>}
         {!loading && !reminders.length && (
           <p className="empty-inline">
-            No future reminders were scheduled. Past times are skipped.
+            {t("No future reminders were scheduled. Past times are skipped.")}
           </p>
         )}
         {reminders.map((r) => (
           <div className="delivery-row" key={r.id}>
             <div>
               <strong>
-                {new Date(r.fire_at).toLocaleString("en-US", {
+                {new Date(r.fire_at).toLocaleString(getLocale(), {
                   timeZone: item.timezone,
                   month: "short",
                   day: "numeric",
@@ -408,48 +428,52 @@ function ItemDetail({
                 })}
               </strong>
               {r.error && (
-                <p className="delivery-error">{r.error.replaceAll("_", " ")}</p>
+                <p className="delivery-error">{deliveryMessage(r.error)}</p>
               )}
               {(r.attempts > 0 || r.deliveries.length > 0) && (
                 <details className="delivery-details">
-                  <summary>Delivery details</summary>
+                  <summary>{t("Delivery details")}</summary>
                   <p>
-                    {r.attempts} attempt{r.attempts === 1 ? "" : "s"}
+                    {t(
+                      r.attempts === 1 ? "{count} attempt" : "{count} attempts",
+                      { count: r.attempts },
+                    )}
                   </p>
                   {r.deliveries.map((d, i) => (
                     <p key={i}>
-                      {d.platform === "ios" ? "iPhone" : "Web"}: {d.status}
-                      {d.error && ` (${d.error.replaceAll("_", " ")})`}
+                      {d.platform === "ios" ? "iPhone" : t("Web")}:{" "}
+                      {t(d.status)}
+                      {d.error && ` (${deliveryMessage(d.error)})`}
                     </p>
                   ))}
                 </details>
               )}
             </div>
-            <span className={`status-pill ${r.status}`}>{r.status}</span>
+            <span className={`status-pill ${r.status}`}>{t(r.status)}</span>
           </div>
         ))}
       </section>
       {error && (
         <p className="error" role="alert">
-          {error}
+          {messageText(error)}
         </p>
       )}
       <div className="delete-section">
         {confirmDelete ? (
           <>
-            <p>Delete this item and cancel its unsent reminders?</p>
+            <p>{t("Delete this item and cancel its unsent reminders?")}</p>
             <button
               className="danger-button"
               disabled={busy}
               onClick={() => void action(onDelete)}
             >
-              Yes, delete item
+              {t("Yes, delete item")}
             </button>
             <button
               className="text-button"
               onClick={() => setConfirmDelete(false)}
             >
-              Keep item
+              {t("Keep item")}
             </button>
           </>
         ) : (
@@ -457,7 +481,7 @@ function ItemDetail({
             className="text-button danger"
             onClick={() => setConfirmDelete(true)}
           >
-            Delete item
+            {t("Delete item")}
           </button>
         )}
       </div>
@@ -466,6 +490,8 @@ function ItemDetail({
 }
 
 export default function App() {
+  useLanguage();
+  useFormLanguage();
   const [account, setAccount] = useState<Account | null>();
   const [invitation, setInvitation] = useState(
     () => new URLSearchParams(location.hash.slice(1)).get("invite") || "",
@@ -529,7 +555,7 @@ export default function App() {
     return (
       <div className="loading-page">
         <Brand />
-        <p>Making a little space...</p>
+        <p>{t("Making a little space...")}</p>
       </div>
     );
   }
@@ -672,7 +698,7 @@ function Workspace({
   async function importFile(value?: File) {
     if (!value || parsing) return;
     if (value.size > 12 * 1024 * 1024) {
-      setImportError("Please choose a file smaller than 12 MB.");
+      setImportError(t("Please choose a file smaller than 12 MB."));
       return;
     }
     setParsing(true);
@@ -712,10 +738,10 @@ function Workspace({
       setToast({
         message:
           undo || item.status !== "open"
-            ? "Item reopened."
+            ? t("Item reopened.")
             : item.kind === "bill"
-              ? "Marked as paid."
-              : "Completed.",
+              ? t("Marked as paid.")
+              : t("Completed."),
         undo: !undo && item.status === "open" ? item : undefined,
       });
       await refresh();
@@ -732,7 +758,7 @@ function Workspace({
     try {
       await enableNotifications(vapid);
       await refresh();
-      setToast({ message: "Notifications enabled on this device." });
+      setToast({ message: t("Notifications enabled on this device.") });
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -751,10 +777,10 @@ function Workspace({
       (page !== "calendar" || !day || i.due_date === day),
   );
   const navigation: { key: Page; label: string; icon: typeof Bell }[] = [
-    { key: "overview", label: "Overview", icon: LayoutDashboard },
-    { key: "calendar", label: "Calendar", icon: CalendarDays },
-    { key: "history", label: "History", icon: History },
-    { key: "notifications", label: "Notifications", icon: Bell },
+    { key: "overview", label: t("Overview"), icon: LayoutDashboard },
+    { key: "calendar", label: t("Calendar"), icon: CalendarDays },
+    { key: "history", label: t("History"), icon: History },
+    { key: "notifications", label: t("Notifications"), icon: Bell },
   ];
   function navigate(next: Page) {
     setPage(next);
@@ -776,7 +802,7 @@ function Workspace({
     <div className="mini-calendar">
       <div className="section-heading">
         <h3>
-          {month.toLocaleDateString("en-US", {
+          {month.toLocaleDateString(getLocale(), {
             month: "long",
             year: "numeric",
           })}
@@ -784,7 +810,7 @@ function Workspace({
         <div className="calendar-arrows">
           <button
             className="icon-button"
-            aria-label="Previous month"
+            aria-label={t("Previous month")}
             onClick={() =>
               setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))
             }
@@ -793,7 +819,7 @@ function Workspace({
           </button>
           <button
             className="icon-button"
-            aria-label="Next month"
+            aria-label={t("Next month")}
             onClick={() =>
               setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))
             }
@@ -803,7 +829,10 @@ function Workspace({
         </div>
       </div>
       <div className="calendar-grid">
-        {["S", "M", "T", "W", "T", "F", "S"].map((s, i) => (
+        {(getLocale() === "zh-CN"
+          ? ["日", "一", "二", "三", "四", "五", "六"]
+          : ["S", "M", "T", "W", "T", "F", "S"]
+        ).map((s, i) => (
           <span className="weekday" key={i}>
             {s}
           </span>
@@ -814,7 +843,18 @@ function Workspace({
           return (
             <button
               key={key}
-              aria-label={`${d.toDateString()}, ${count} items`}
+              aria-label={t("{date}, {count} items", {
+                date:
+                  getLocale() === "en-US"
+                    ? d.toDateString()
+                    : d.toLocaleDateString(getLocale(), {
+                        year: "numeric",
+                        month: "long",
+                        day: "numeric",
+                        weekday: "long",
+                      }),
+                count,
+              })}
               className={`${key === today ? "today" : ""} ${key === day ? "chosen" : ""} ${d.getMonth() !== month.getMonth() ? "outside" : ""}`}
               onClick={() => {
                 setPage("calendar");
@@ -828,7 +868,8 @@ function Workspace({
         })}
       </div>
       <div className="calendar-legend">
-        <i /> Items to remember
+        <i />
+        {t("Items to remember")}
       </div>
     </div>
   );
@@ -837,10 +878,11 @@ function Workspace({
     <div className="app-shell">
       <aside className="sidebar">
         <Brand />
-        <nav aria-label="Main navigation">
+        <nav aria-label={t("Main navigation")}>
           {navigation.map(({ key, label, icon: Icon }) => (
             <button
               key={key}
+              aria-label={label}
               className={page === key ? "active" : ""}
               aria-current={page === key ? "page" : undefined}
               onClick={() => navigate(key)}
@@ -858,18 +900,21 @@ function Workspace({
             className={page === "settings" ? "active" : ""}
             onClick={() => navigate("settings")}
           >
-            <Settings2 size={18} /> Settings
+            <Settings2 size={18} />
+            {t("Settings")}
           </button>
           <div className="profile">
             <span>{account.user.display_name[0].toUpperCase()}</span>
             <div>
               <strong>{account.user.display_name}</strong>
               <small>
-                {account.user.is_admin ? "Administrator" : "Personal account"}
+                {account.user.is_admin
+                  ? t("Administrator")
+                  : t("Personal account")}
               </small>
             </div>
             <button
-              aria-label="Sign out"
+              aria-label={t("Sign out")}
               className="icon-button"
               onClick={() => void onSignOut().catch((e) => setError(e.message))}
             >
@@ -884,7 +929,7 @@ function Workspace({
           <div className="topbar-right">
             <span className="today-label">
               <CalendarDays size={15} />
-              {new Date(clock).toLocaleDateString("en-US", {
+              {new Date(clock).toLocaleDateString(getLocale(), {
                 month: "short",
                 day: "numeric",
                 year: "numeric",
@@ -892,7 +937,7 @@ function Workspace({
             </span>
             <button
               className="icon-button notification-button"
-              aria-label="Open notifications"
+              aria-label={t("Open notifications")}
               onClick={() => navigate("notifications")}
             >
               <Bell size={19} />
@@ -906,27 +951,29 @@ function Workspace({
         <main>
           <div className="page-heading">
             <div>
-              <h1>{page[0].toUpperCase() + page.slice(1)}</h1>
+              <h1>{t(page[0].toUpperCase() + page.slice(1))}</h1>
               {page === "overview" && (
                 <p>
-                  {items.length} open
-                  {overdue.length > 0 ? ` · ${overdue.length} overdue` : ""}
+                  {t("{count} open", { count: items.length })}
+                  {overdue.length > 0
+                    ? ` · ${t("{count} overdue", { count: overdue.length })}`
+                    : ""}
                 </p>
               )}
             </div>
             {(page === "overview" || page === "calendar") && (
               <button className="primary add-item" onClick={() => newItem()}>
                 <Plus size={20} />
-                Add item
+                {t("Add item")}
               </button>
             )}
           </div>
           {error && (
             <div className="error global-error" role="alert">
-              {error}
+              {messageText(error)}
               <button
                 className="icon-button"
-                aria-label="Dismiss error"
+                aria-label={t("Dismiss error")}
                 onClick={() => setError("")}
               >
                 <X size={15} />
@@ -949,16 +996,16 @@ function Workspace({
                 }}
               >
                 <div className="capture-heading">
-                  <h2>Add a reminder</h2>
+                  <h2>{t("Add a reminder")}</h2>
                 </div>
                 <div className="capture-input">
                   <textarea
                     ref={capture}
                     rows={1}
-                    aria-label="Natural language input"
+                    aria-label={t("Natural language input")}
                     value={text}
                     onChange={(e) => setText(e.target.value)}
-                    placeholder="e.g. Dentist tomorrow at 9am"
+                    placeholder={t("e.g. Dentist tomorrow at 9am")}
                     onKeyDown={(e) => {
                       if (
                         e.key === "Enter" &&
@@ -973,7 +1020,7 @@ function Workspace({
                   <button
                     className="parse-button"
                     disabled={!text.trim() || parsing}
-                    aria-label="Preview draft"
+                    aria-label={t("Preview draft")}
                     onClick={() => void parseInput()}
                   >
                     {parsing ? (
@@ -990,21 +1037,24 @@ function Workspace({
                       onClick={() => file.current?.click()}
                     >
                       <Upload size={15} />
-                      Import a bill
+                      {t("Import a bill")}
                     </button>
                   </div>
-                  <span>Review before saving</span>
+                  <span>{t("Review before saving")}</span>
                 </div>
                 {parsing && (
                   <p className="small muted" role="status">
-                    Preparing your draft. Scanned files may take a moment…
+                    {t(
+                      "Preparing your draft. Scanned files may take a moment…",
+                    )}
                   </p>
                 )}
                 {importError && (
                   <div className="import-error" role="alert">
-                    <span>{importError}</span>
+                    <span>{messageText(importError)}</span>
                     <button className="text-button" onClick={() => newItem()}>
-                      Enter manually <ArrowRight size={15} />
+                      {t("Enter manually")}
+                      <ArrowRight size={15} />
                     </button>
                   </div>
                 )}
@@ -1016,7 +1066,7 @@ function Workspace({
               {calendar}
               {day && (
                 <button className="text-button" onClick={() => setDay(null)}>
-                  Show all dates
+                  {t("Show all dates")}
                 </button>
               )}
             </div>
@@ -1029,21 +1079,21 @@ function Workspace({
                 <div className="section-heading">
                   <h2>
                     {page === "history"
-                      ? "Your history"
+                      ? t("Your history")
                       : page === "calendar" && day
                         ? new Date(`${day}T12:00:00`).toLocaleDateString(
-                            "en-US",
+                            getLocale(),
                             { month: "long", day: "numeric" },
                           )
-                        : "Your items"}
+                        : t("Your items")}
                     <span className="count">{visible.length}</span>
                   </h2>
                   <label className="search-box">
                     <Search size={16} />
                     <input
-                      aria-label="Search items"
+                      aria-label={t("Search items")}
                       value={search}
-                      placeholder="Search items"
+                      placeholder={t("Search items")}
                       onChange={(e) => setSearch(e.target.value)}
                     />
                   </label>
@@ -1059,23 +1109,23 @@ function Workspace({
                         onClick={() => setFilter(f)}
                       >
                         {f === "all"
-                          ? "All items"
+                          ? t("All items")
                           : f === "bill"
-                            ? "Bills"
+                            ? t("Bills")
                             : f === "appointment"
-                              ? "Appointments"
-                              : "Other"}
+                              ? t("Appointments")
+                              : t("Other")}
                       </button>
                     ))}
                   </div>
                   <span className="sort-label">
-                    {page === "history" ? "Latest first" : "Due date"}
+                    {page === "history" ? t("Latest first") : t("Due date")}
                   </span>
                 </div>
                 {loading ? (
                   <div className="empty-state">
                     <span className="spinner dark" />
-                    <p>Loading your items…</p>
+                    <p>{t("Loading your items…")}</p>
                   </div>
                 ) : visible.length ? (
                   <div className="item-list">
@@ -1094,7 +1144,7 @@ function Workspace({
                               <div
                                 className={`group-label ${late ? "late" : ""}`}
                               >
-                                {late ? "Overdue" : "Upcoming"}
+                                {late ? t("Overdue") : t("Upcoming")}
                               </div>
                             )}
                           <article className="item-row">
@@ -1109,7 +1159,7 @@ function Workspace({
                                 <strong>{item.title}</strong>
                                 <span className={late ? "late-text" : ""}>
                                   {new Date(item.due_at).toLocaleDateString(
-                                    "en-US",
+                                    getLocale(),
                                     {
                                       timeZone: item.timezone,
                                       month: "short",
@@ -1117,7 +1167,7 @@ function Workspace({
                                     },
                                   )}{" "}
                                   · {item.due_time}
-                                  {late ? " · Overdue" : ""}
+                                  {late ? ` · ${t("Overdue")}` : ""}
                                 </span>
                               </span>
                               <span className="item-amount">{money(item)}</span>
@@ -1127,8 +1177,12 @@ function Workspace({
                                 className="complete-button"
                                 aria-label={
                                   item.kind === "bill"
-                                    ? `Mark ${item.title} as paid`
-                                    : `Complete ${item.title}`
+                                    ? t("Mark {title} as paid", {
+                                        title: item.title,
+                                      })
+                                    : t("Complete {title}", {
+                                        title: item.title,
+                                      })
                                 }
                                 disabled={working === item.id}
                                 onClick={() =>
@@ -1137,13 +1191,13 @@ function Workspace({
                               >
                                 <Check size={17} />
                                 <span>
-                                  {item.kind === "bill" ? "Paid" : "Done"}
+                                  {item.kind === "bill" ? t("Paid") : t("Done")}
                                 </span>
                               </button>
                             ) : (
                               <span className="status-pill sent">
                                 <Check size={12} />
-                                {item.status}
+                                {t(item.status)}
                               </span>
                             )}
                           </article>
@@ -1164,26 +1218,26 @@ function Workspace({
                     </span>
                     <h3>
                       {search
-                        ? "No matching items"
+                        ? t("No matching items")
                         : page === "history"
-                          ? "No finished items"
+                          ? t("No finished items")
                           : day
-                            ? "Nothing scheduled"
-                            : "No open items"}
+                            ? t("Nothing scheduled")
+                            : t("No open items")}
                     </h3>
                     <p>
                       {search
-                        ? "Try another search or filter."
+                        ? t("Try another search or filter.")
                         : page === "history"
-                          ? "Paid and completed items appear here."
+                          ? t("Paid and completed items appear here.")
                           : day
-                            ? "Choose another day or add an item."
-                            : "Add a bill, appointment, or reminder."}
+                            ? t("Choose another day or add an item.")
+                            : t("Add a bill, appointment, or reminder.")}
                     </p>
                     {page !== "history" && !search && (
                       <button className="text-button" onClick={() => newItem()}>
                         <Plus size={15} />
-                        Add your first item
+                        {t("Add your first item")}
                       </button>
                     )}
                   </div>
@@ -1194,9 +1248,9 @@ function Workspace({
           {page === "notifications" && (
             <div className="settings-grid">
               <section className="settings-card">
-                <h2>Remind me on this device</h2>
+                <h2>{t("Remind me on this device")}</h2>
                 <p className="muted">
-                  Notifications show titles and times, never amounts.
+                  {t("Notifications show titles and times, never amounts.")}
                 </p>
                 <button
                   className="primary"
@@ -1204,24 +1258,28 @@ function Workspace({
                   onClick={() => void enablePush()}
                 >
                   <Bell size={16} />
-                  {pushBusy ? "Connecting…" : "Enable on this device"}
+                  {pushBusy ? t("Connecting…") : t("Enable on this device")}
                 </button>
-                <h3 className="device-title">Your devices</h3>
+                <h3 className="device-title">{t("Your devices")}</h3>
                 {!devices.length && (
-                  <p className="empty-inline">No devices connected yet.</p>
+                  <p className="empty-inline">
+                    {t("No devices connected yet.")}
+                  </p>
                 )}
                 {devices.map((d) => (
                   <div className="delivery-row" key={d.id}>
                     <div>
                       <strong>
-                        {d.platform === "ios" ? "iPhone" : "Web browser"}
+                        {d.platform === "ios" ? "iPhone" : t("Web browser")}
                       </strong>
-                      <small>Device {d.id.slice(0, 8)}</small>
+                      <small>
+                        {t("Device {id}", { id: d.id.slice(0, 8) })}
+                      </small>
                     </div>
                     <span
                       className={`status-pill ${d.active ? "sent" : "cancelled"}`}
                     >
-                      {d.active ? "Connected" : "Disabled"}
+                      {d.active ? t("Connected") : t("Disabled")}
                     </span>
                     {d.active && (
                       <button
@@ -1232,20 +1290,22 @@ function Workspace({
                             .catch((e) => setError(e.message))
                         }
                       >
-                        Disable
+                        {t("Disable")}
                       </button>
                     )}
                   </div>
                 ))}
                 <details className="disclosure">
-                  <summary>How reminders work</summary>
+                  <summary>{t("How reminders work")}</summary>
                   <p>
-                    Enable each device separately. Open an item to check
-                    delivery status.
+                    {t(
+                      "Enable each device separately. Open an item to check delivery status.",
+                    )}
                   </p>
                   <p>
-                    We check every minute and retry failed sends. Sent means the
-                    push service accepted a reminder, not that it was displayed.
+                    {t(
+                      "We check every minute and retry failed sends. Sent means the push service accepted a reminder, not that it was displayed.",
+                    )}
                   </p>
                 </details>
               </section>
@@ -1254,29 +1314,31 @@ function Workspace({
           {page === "settings" && <AccountSettings account={account} />}
           {page === "settings" && (
             <details className="settings-card disclosure privacy-settings">
-              <summary>Privacy &amp; preferences</summary>
+              <summary>{t("Privacy & preferences")}</summary>
               <div className="setting-line">
-                <strong>Time zone</strong>
+                <strong>{t("Time zone")}</strong>
                 <span>{context().timezone}</span>
               </div>
               <p className="muted">
-                New items use this device's time zone. You can change it per
-                item.
+                {t(
+                  "New items use this device's time zone. You can change it per item.",
+                )}
               </p>
               <div className="setting-line">
-                <strong>Files</strong>
-                <span>Discarded after parsing</span>
+                <strong>{t("Files")}</strong>
+                <span>{t("Discarded after parsing")}</span>
               </div>
               <p className="muted">
-                Only the last 4 account digits are stored.
+                {t("Only the last 4 account digits are stored.")}
               </p>
               <div className="setting-line">
-                <strong>Voice input</strong>
-                <span>Keyboard dictation</span>
+                <strong>{t("Voice input")}</strong>
+                <span>{t("Keyboard dictation")}</span>
               </div>
               <p className="muted">
-                Use your iPhone keyboard's dictation key. Mewmo does not access
-                your microphone.
+                {t(
+                  "Use your iPhone keyboard's dictation key. Mewmo does not access your microphone.",
+                )}
               </p>
             </details>
           )}
@@ -1285,7 +1347,8 @@ function Workspace({
               className="secondary signout-settings"
               onClick={() => void onSignOut().catch((e) => setError(e.message))}
             >
-              <LogOut size={16} /> Sign out
+              <LogOut size={16} />
+              {t("Sign out")}
             </button>
           )}
         </main>
@@ -1297,7 +1360,7 @@ function Workspace({
         accept="application/pdf,image/*"
         onChange={(e) => void importFile(e.target.files?.[0])}
       />
-      <nav className="mobile-nav" aria-label="Mobile navigation">
+      <nav className="mobile-nav" aria-label={t("Mobile navigation")}>
         {navigation.map(({ key, label, icon: Icon }) => (
           <button
             key={key}
@@ -1309,9 +1372,9 @@ function Workspace({
             <Icon size={20} />
             <span>
               {key === "overview"
-                ? "Home"
+                ? t("Home")
                 : key === "notifications"
-                  ? "Alerts"
+                  ? t("Alerts")
                   : label}
             </span>
           </button>
@@ -1321,7 +1384,7 @@ function Workspace({
           className={page === "settings" ? "active" : ""}
         >
           <Settings2 size={20} />
-          <span>Settings</span>
+          <span>{t("Settings")}</span>
         </button>
       </nav>
       {draft && (
@@ -1337,7 +1400,7 @@ function Workspace({
             setEditId(undefined);
             setText("");
             setToast({
-              message: editId ? "Changes saved." : "Item saved.",
+              message: editId ? t("Changes saved.") : t("Item saved."),
             });
             void refresh().catch((e) => setError(e.message));
           }}
@@ -1363,7 +1426,9 @@ function Workspace({
           onDelete={async () => {
             await api(`/items/${selected.id}`, { method: "DELETE" });
             setSelected(null);
-            setToast({ message: "Item deleted. Unsent reminders cancelled." });
+            setToast({
+              message: t("Item deleted. Unsent reminders cancelled."),
+            });
             await refresh();
           }}
         />
@@ -1371,7 +1436,7 @@ function Workspace({
       {toast && (
         <div className="toast" role="status">
           <Check size={18} />
-          <span>{toast.message}</span>
+          <span>{messageText(toast.message)}</span>
           {toast.undo && (
             <button
               disabled={!!working}
@@ -1379,12 +1444,12 @@ function Workspace({
                 void changeState(toast.undo!, true).catch(() => {})
               }
             >
-              Undo
+              {t("Undo")}
             </button>
           )}
           <button
             className="icon-button"
-            aria-label="Dismiss notification"
+            aria-label={t("Dismiss notification")}
             onClick={() => setToast(null)}
           >
             <X size={16} />

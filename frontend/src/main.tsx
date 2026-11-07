@@ -1,3 +1,4 @@
+import { t } from "./i18n";
 import { Component, StrictMode, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
@@ -15,13 +16,14 @@ class ErrorBoundary extends Component<
   render() {
     return this.state.failed ? (
       <div className="loading-page">
-        <h2>Let’s try that again.</h2>
+        <h2>{t("Let’s try that again.")}</h2>
         <p>
-          Mewmo couldn’t display this page. Your saved items are still on the
-          server.
+          {t(
+            "Mewmo couldn’t display this page. Your saved items are still on the server.",
+          )}
         </p>
         <button className="primary" onClick={() => location.reload()}>
-          Reload Mewmo
+          {t("Reload Mewmo")}
         </button>
       </div>
     ) : (

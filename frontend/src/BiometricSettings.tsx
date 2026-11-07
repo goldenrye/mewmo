@@ -1,3 +1,4 @@
+import { messageText, t } from "./i18n";
 import { useEffect, useState } from "react";
 import {
   biometricStatus,
@@ -22,7 +23,9 @@ export function BiometricSettings() {
         .catch(() => {
           if (live)
             setError(
-              "Biometric settings are unavailable. Reopen the app to try again.",
+              t(
+                "Biometric settings are unavailable. Reopen the app to try again.",
+              ),
             );
         });
     }
@@ -34,7 +37,7 @@ export function BiometricSettings() {
   if (!status)
     return error ? (
       <p className="error" role="alert">
-        {error}
+        {messageText(error)}
       </p>
     ) : null;
   async function toggle() {
@@ -49,8 +52,10 @@ export function BiometricSettings() {
       setStatus(next);
       setMessage(
         next.enabled
-          ? `${next.label} is ready for your next app launch.`
-          : `${next.label} sign-in is off.`,
+          ? t("{method} is ready for your next app launch.", {
+              method: t(next.label),
+            })
+          : t("{method} sign-in is off.", { method: t(next.label) }),
       );
     } catch (error) {
       setError((error as Error).message);
@@ -61,15 +66,19 @@ export function BiometricSettings() {
   return (
     <details className="disclosure">
       <summary>
-        {status.label} sign-in · {status.enabled ? "On" : "Off"}
+        {t("{method} sign-in", { method: t(status.label) })} ·{" "}
+        {status.enabled ? t("On") : t("Off")}
       </summary>
       <p className="muted small">
-        Unlock your saved session on this iPhone. Your password is still needed
-        after 7 days or if you sign out.
+        {t(
+          "Unlock your saved session on this iPhone. Your password is still needed after 7 days or if you sign out.",
+        )}
       </p>
       {!status.available && (
         <p className="muted small">
-          Set up or allow {status.label} in iPhone Settings to use it.
+          {t("Set up or allow {method} in iPhone Settings to use it.", {
+            method: t(status.label),
+          })}
         </p>
       )}
       <button
@@ -78,15 +87,17 @@ export function BiometricSettings() {
         onClick={() => void toggle()}
       >
         {busy
-          ? "Please wait..."
-          : `${status.enabled ? "Disable" : "Enable"} ${status.label}`}
+          ? t("Please wait...")
+          : t(status.enabled ? "Disable {method}" : "Enable {method}", {
+              method: t(status.label),
+            })}
       </button>
       {error && (
         <p className="error" role="alert">
-          {error}
+          {messageText(error)}
         </p>
       )}
-      {message && <p role="status">{message}</p>}
+      {message && <p role="status">{messageText(message)}</p>}
     </details>
   );
 }

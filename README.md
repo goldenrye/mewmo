@@ -15,6 +15,7 @@ An invite-only, multi-user bill and reminder app. Each person has a private acco
 - PDF and image import, including scanned PDFs and HEIC photos. Limits: 12 MB, 5 PDF pages, 25 megapixels.
 - In-memory drafts with uncertain fields, manual fallback, possible duplicate warnings, and account-number redaction.
 - Chinese/English/mixed text capture. iPhone voice input uses the system keyboard's dictation; no microphone control or permission.
+- English and Simplified Chinese interfaces, with automatic device-language detection and a saved language selector.
 - Full date, weekday, time, and IANA zone on every confirmation card.
 - Manual create/edit/delete, overdue-first home, search, calendar, one-tap paid/completed, undo, and history.
 - Editable reminder rules; each fire time has a database row and per-device delivery audit.
@@ -26,6 +27,14 @@ An invite-only, multi-user bill and reminder app. Each person has a private acco
 Parsing is deliberately conservative, not an open-ended AI assistant. Common relative dates, explicit dates, weekdays, numeric Chinese month/day dates, Chinese times, and labelled invoice fields are supported. Ambiguous currencies and missing information require review. For example, `这个月水电 120 刀，已付` produces a paid bill draft with amount 120, a currency warning, and a missing due date to fill in. A statement about "this month" does not invent a deadline.
 
 **Parsing never creates items or reminders.** Only a separate item request with `confirmed: true` writes an item. Drafts are neither stored in the database nor cached in browser storage.
+
+## Language
+
+Choose **Language → 简体中文** on the sign-in screen or under **Settings → Your account**. The default follows the device/browser language; Chinese language variants use Simplified Chinese, and unsupported languages fall back to English. The preference is saved per browser/iPhone installation, not to an account, and updates other open browser tabs.
+
+The interface, accessibility labels, common validation/import errors, dates, delivery statuses, and Face ID prompts are localized. Switching language preserves open drafts and never translates your titles, payees, names, or account data; it also does not change currencies, time zones, schedules, or parsing rules. Unknown server errors retain their original text. Push notification date text remains server-formatted; this preference controls the client interface.
+
+Native permission explanations are bundled in English and Simplified Chinese and follow the iOS app language. The Face ID reason follows Mewmo's selected language. Rebuild/reinstall the native app to include these resources; updating the website alone does not update the iPhone bundle.
 
 ## Local Development
 

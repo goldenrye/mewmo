@@ -1,3 +1,4 @@
+import { messageText, t } from "./i18n";
 import { useEffect, useRef, useState } from "react";
 import {
   AlertCircle,
@@ -56,7 +57,7 @@ export function Editor({
     <span>
       {text}
       {value.uncertain.includes(key) && (
-        <small className="review-flag">Check this</small>
+        <small className="review-flag">{t("Check this")}</small>
       )}
     </span>
   );
@@ -105,16 +106,16 @@ export function Editor({
           <div>
             <h2>
               {itemId
-                ? "Edit item"
+                ? t("Edit item")
                 : draft.source === "manual"
-                  ? "Add item"
-                  : "Review draft"}
+                  ? t("Add item")
+                  : t("Review draft")}
             </h2>
           </div>
           <button
             type="button"
             className="icon-button"
-            aria-label="Close editor"
+            aria-label={t("Close editor")}
             onClick={onClose}
             disabled={busy}
           >
@@ -122,12 +123,12 @@ export function Editor({
           </button>
         </div>
         {!itemId && (
-          <p className="muted">Nothing is saved until you confirm.</p>
+          <p className="muted">{t("Nothing is saved until you confirm.")}</p>
         )}
         {value.warnings.map((w, i) => (
           <div className="notice" key={i}>
             <AlertCircle size={17} />
-            <span>{w}</span>
+            <span>{messageText(w)}</span>
           </div>
         ))}
         <div className="segmented kind-switch">
@@ -145,36 +146,36 @@ export function Editor({
                 }))
               }
             >
-              {kindName[kind]}
+              {t(kindName[kind])}
             </button>
           ))}
         </div>
         <label>
-          {label("title", "Title")}
+          {label("title", t("Title"))}
           <input
             autoFocus
             required
             maxLength={180}
             value={value.title}
             onChange={(e) => field("title", e.target.value)}
-            placeholder="Give it a name"
+            placeholder={t("Give it a name")}
           />
         </label>
         {value.kind === "bill" && (
           <>
             <label>
-              {label("payee", "Payee")}
+              {label("payee", t("Payee"))}
               <input
                 required
                 maxLength={180}
                 value={value.payee || ""}
                 onChange={(e) => field("payee", e.target.value)}
-                placeholder="Who is this bill from?"
+                placeholder={t("Who is this bill from?")}
               />
             </label>
             <div className="form-grid">
               <label>
-                {label("amount", "Amount")}
+                {label("amount", t("Amount"))}
                 <input
                   required
                   type="number"
@@ -187,7 +188,7 @@ export function Editor({
                 />
               </label>
               <label>
-                {label("currency", "Currency")}
+                {label("currency", t("Currency"))}
                 <input
                   required
                   pattern="[A-Z]{3}"
@@ -199,20 +200,23 @@ export function Editor({
                   placeholder="USD"
                   list="currencies"
                 />
-                <datalist id="currencies">
-                  {["USD", "CAD", "AUD", "CNY", "EUR", "GBP", "HKD", "JPY"].map(
-                    (c) => (
-                      <option key={c}>{c}</option>
-                    ),
-                  )}
-                </datalist>
               </label>
             </div>
+            <datalist id="currencies">
+              {["USD", "CAD", "AUD", "CNY", "EUR", "GBP", "HKD", "JPY"].map(
+                (c) => (
+                  <option key={c}>{c}</option>
+                ),
+              )}
+            </datalist>
           </>
         )}
         <div className="form-grid">
           <label>
-            {label("due_date", value.kind === "bill" ? "Due date" : "Date")}
+            {label(
+              "due_date",
+              value.kind === "bill" ? t("Due date") : t("Date"),
+            )}
             <input
               required
               type="date"
@@ -221,7 +225,7 @@ export function Editor({
             />
           </label>
           <label>
-            {label("due_time", "Time")}
+            {label("due_time", t("Time"))}
             <input
               required
               type="time"
@@ -246,11 +250,11 @@ export function Editor({
         >
           <summary>
             {value.kind === "bill"
-              ? "Time zone & account details"
-              : "Change time zone"}
+              ? t("Time zone & account details")
+              : t("Change time zone")}
           </summary>
           <label>
-            {label("timezone", "Time zone")}
+            {label("timezone", t("Time zone"))}
             <input
               required
               value={value.timezone}
@@ -259,7 +263,7 @@ export function Editor({
           </label>
           {value.kind === "bill" && (
             <label>
-              {label("account_last4", "Account last 4 digits (optional)")}
+              {label("account_last4", t("Account last 4 digits (optional)"))}
               <input
                 inputMode="numeric"
                 pattern="[0-9]{4}"
@@ -286,18 +290,19 @@ export function Editor({
               )
             }
           />
-          {value.kind === "bill" ? "Already paid" : "Already completed"}
+          {value.kind === "bill" ? t("Already paid") : t("Already completed")}
         </label>
         <details className="rules disclosure">
           <summary>
             <span>
-              <Bell size={18} /> Reminders
+              <Bell size={18} />
+              {t("Reminders")}
             </span>
             <span className="muted">
               {value.status !== "open"
-                ? "Paused"
+                ? t("Paused")
                 : value.rules.length === 0
-                  ? "None"
+                  ? t("None")
                   : value.rules.length}
             </span>
           </summary>
@@ -307,28 +312,28 @@ export function Editor({
               className="text-button"
               onClick={() => field("rules", defaults(value.kind))}
             >
-              Reset defaults
+              {t("Reset defaults")}
             </button>
           </div>
           {value.status !== "open" && (
             <p className="muted">
-              Reminders are paused while this item is finished.
+              {t("Reminders are paused while this item is finished.")}
             </p>
           )}
           {value.rules.map((r, i) => (
             <div className="rule-row" key={i}>
               <select
-                aria-label={`Reminder ${i + 1} mode`}
+                aria-label={t("Reminder {number} mode", { number: i + 1 })}
                 value={r.mode}
                 onChange={(e) =>
                   rule(i, { mode: e.target.value as Rule["mode"] })
                 }
               >
-                <option value="before">Minutes before</option>
-                <option value="day">Days from due date</option>
+                <option value="before">{t("Minutes before")}</option>
+                <option value="day">{t("Days from due date")}</option>
               </select>
               <input
-                aria-label={`Reminder ${i + 1} offset`}
+                aria-label={t("Reminder {number} offset", { number: i + 1 })}
                 type="number"
                 min={r.mode === "before" ? 0 : -365}
                 max={r.mode === "before" ? 525600 : 365}
@@ -345,7 +350,7 @@ export function Editor({
               {r.mode === "day" && (
                 <input
                   type="time"
-                  aria-label={`Reminder ${i + 1} time`}
+                  aria-label={t("Reminder {number} time", { number: i + 1 })}
                   required
                   value={r.at}
                   onChange={(e) => rule(i, { at: e.target.value })}
@@ -354,7 +359,7 @@ export function Editor({
               <button
                 type="button"
                 className="icon-button"
-                aria-label={`Remove reminder ${i + 1}`}
+                aria-label={t("Remove reminder {number}", { number: i + 1 })}
                 onClick={() =>
                   field(
                     "rules",
@@ -367,7 +372,9 @@ export function Editor({
             </div>
           ))}
           <p className="muted small">
-            Days: -1 = before, 0 = due date, +1 = after. Past times are skipped.
+            {t(
+              "Days: -1 = before, 0 = due date, +1 = after. Past times are skipped.",
+            )}
           </p>
           <button
             type="button"
@@ -380,7 +387,8 @@ export function Editor({
               ])
             }
           >
-            <Plus size={15} /> Add reminder
+            <Plus size={15} />
+            {t("Add reminder")}
           </button>
         </details>
         {!!value.duplicates.length && (
@@ -391,12 +399,12 @@ export function Editor({
               checked={duplicateAccepted}
               onChange={(e) => setDuplicateAccepted(e.target.checked)}
             />
-            I reviewed the duplicate warning and want to save this bill.
+            {t("I reviewed the duplicate warning and want to save this bill.")}
           </label>
         )}
         {error && (
           <p className="error" role="alert">
-            {error}
+            {messageText(error)}
           </p>
         )}
         <div className="dialog-footer">
@@ -406,10 +414,14 @@ export function Editor({
             disabled={busy}
             onClick={onClose}
           >
-            Cancel
+            {t("Cancel")}
           </button>
           <button type="submit" className="primary" disabled={busy}>
-            {busy ? "Saving…" : itemId ? "Save changes" : "Confirm & save"}
+            {busy
+              ? t("Saving…")
+              : itemId
+                ? t("Save changes")
+                : t("Confirm & save")}
             <Check size={17} />
           </button>
         </div>
