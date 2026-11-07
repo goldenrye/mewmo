@@ -1,14 +1,19 @@
 import { expect, test, type Page } from "@playwright/test";
 import { randomUUID } from "node:crypto";
 
-test("signing out clears the account from another open tab", async ({ page, context }) => {
+test("signing out clears the account from another open tab", async ({
+  page,
+  context,
+}) => {
   await login(page);
   const other = await context.newPage();
   await other.goto("/");
-  await expect(other.getByRole("heading", { name: "A little less on your mind." })).toBeVisible();
+  await expect(other.getByRole("heading", { name: "Overview" })).toBeVisible();
   await signOut(page);
-  await expect(other.getByRole("heading", { name: "Welcome to Mewmo" })).toBeVisible();
-  await expect(other.getByRole("heading", { name: "A little less on your mind." })).toHaveCount(0);
+  await expect(
+    other.getByRole("heading", { name: "Welcome to Mewmo" }),
+  ).toBeVisible();
+  await expect(other.getByRole("heading", { name: "Overview" })).toHaveCount(0);
 });
 
 async function login(
@@ -19,10 +24,8 @@ async function login(
   await page.goto("/");
   await page.getByLabel("Username", { exact: true }).fill(username);
   await page.getByLabel("Your password", { exact: true }).fill(password);
-  await page.getByRole("button", { name: "Come on in" }).click();
-  await expect(
-    page.getByRole("heading", { name: "A little less on your mind." }),
-  ).toBeVisible();
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Overview" })).toBeVisible();
 }
 
 async function settings(page: Page) {
@@ -90,12 +93,12 @@ test("admin invites a private member; single-use link cannot be reused", async (
   const link = page.getByLabel("Invitation link", { exact: true });
   await expect(link).toHaveValue(/#invite=/);
   const url = await link.inputValue();
-  await expect(page.getByText(/expires 7 days after creation/)).toBeVisible();
+  await expect(
+    page.getByText("One person per link. Expires in 7 days."),
+  ).toBeVisible();
   await signOut(page);
   await register(page, url, username);
-  await expect(
-    page.getByRole("heading", { name: "A little less on your mind." }),
-  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Overview" })).toBeVisible();
   await expect(
     page.getByText("Administrator private appointment", { exact: true }),
   ).toHaveCount(0);
@@ -139,6 +142,10 @@ test("admin can revoke a pending invitation before it is redeemed", async ({
     .getByRole("button", { name: "Create invite link", exact: true })
     .click();
   const invitation = await (await created).json();
+  await page
+    .locator("summary")
+    .filter({ hasText: "Manage invitations" })
+    .click();
   const row = page
     .locator(".invitation-row")
     .filter({ hasText: invitation.id.slice(0, 8) });

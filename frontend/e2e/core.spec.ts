@@ -9,10 +9,8 @@ test.beforeEach(async ({ page }) => {
   await page
     .getByLabel("Your password")
     .fill(process.env.MEWMO_TEST_PASSWORD || "mewmo-local-test");
-  await page.getByRole("button", { name: "Come on in" }).click();
-  await expect(
-    page.getByRole("heading", { name: "A little less on your mind." }),
-  ).toBeVisible();
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Overview" })).toBeVisible();
 });
 
 test("Chinese capture requires confirmation and shows Sunday with full date", async ({
@@ -64,13 +62,9 @@ test("manual bill supports paid, undo, history, edit, delivery status, and delet
       exact: true,
     })
     .click();
-  await expect(
-    page.getByText("Bill marked as paid. One less thing."),
-  ).toBeVisible();
+  await expect(page.getByText("Marked as paid.")).toBeVisible();
   await page.getByRole("button", { name: "Undo", exact: true }).click();
-  await expect(
-    page.getByText("Item reopened. Future reminders restored."),
-  ).toBeVisible();
+  await expect(page.getByText("Item reopened.")).toBeVisible();
   await page.getByText(safeTitle.trim(), { exact: true }).click();
   await expect(
     dialog.getByRole("heading", { name: "Reminder delivery" }),
@@ -123,9 +117,7 @@ test("failed import offers manual entry and does not save", async ({
   ).toBeVisible();
   await page.getByRole("button", { name: "Enter manually" }).click();
   await expect(
-    page
-      .getByRole("dialog")
-      .getByRole("heading", { name: "Does this look right?" }),
+    page.getByRole("dialog").getByRole("heading", { name: "Add item" }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Close editor" }).click();
   const after = await page.request.get("/api/items").then((r) => r.json());
@@ -147,6 +139,10 @@ test("calendar and settings work without horizontal overflow", async ({
   await page
     .getByRole("button", { name: "Settings", exact: true })
     .filter({ visible: true })
+    .click();
+  await page
+    .locator("summary")
+    .filter({ hasText: "Privacy & preferences" })
     .click();
   await expect(
     page.getByText("Keyboard dictation", { exact: true }),

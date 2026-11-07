@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Copy, Link, ShieldCheck } from "lucide-react";
+import { Copy, Link } from "lucide-react";
 import { api } from "./api";
 import type { Account, Invitation } from "./types";
 
@@ -40,64 +40,60 @@ export function AccountSettings({ account }: { account: Account }) {
   return (
     <div className="settings-grid account-settings">
       <section className="settings-card account-card">
-        <ShieldCheck size={25} />
         <h2>Your account</h2>
         <p className="muted">
           {account.user.display_name} · @{account.user.username}
         </p>
-        <p className="muted">
-          Your bills, history, and devices are private to your account.
-          Administrators can invite people, but cannot view their items through
-          the app.
-        </p>
-        <form onSubmit={changePassword}>
-          <h3>Change password</h3>
-          <label>
-            Current password
-            <input
-              type="password"
-              required
-              autoComplete="current-password"
-              maxLength={512}
-              value={current}
-              onChange={(e) => setCurrent(e.target.value)}
-            />
-          </label>
-          <label>
-            New password
-            <input
-              type="password"
-              required
-              autoComplete="new-password"
-              minLength={12}
-              maxLength={512}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-          </label>
-          <label>
-            Confirm new password
-            <input
-              type="password"
-              required
-              autoComplete="new-password"
-              minLength={12}
-              maxLength={512}
-              value={confirmation}
-              onChange={(e) => setConfirmation(e.target.value)}
-            />
-          </label>
-          <p className="muted small">Use at least 12 characters.</p>
-          {error && (
-            <p className="error" role="alert">
-              {error}
-            </p>
-          )}
-          {message && <p role="status">{message}</p>}
-          <button className="secondary" disabled={busy}>
-            {busy ? "Updating..." : "Update password"}
-          </button>
-        </form>
+        <details className="disclosure">
+          <summary>Change password</summary>
+          <form onSubmit={changePassword}>
+            <label>
+              Current password
+              <input
+                type="password"
+                required
+                autoComplete="current-password"
+                maxLength={512}
+                value={current}
+                onChange={(e) => setCurrent(e.target.value)}
+              />
+            </label>
+            <label>
+              New password
+              <input
+                type="password"
+                required
+                autoComplete="new-password"
+                minLength={12}
+                maxLength={512}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </label>
+            <label>
+              Confirm new password
+              <input
+                type="password"
+                required
+                autoComplete="new-password"
+                minLength={12}
+                maxLength={512}
+                value={confirmation}
+                onChange={(e) => setConfirmation(e.target.value)}
+              />
+            </label>
+            <p className="muted small">Use at least 12 characters.</p>
+            {error && (
+              <p className="error" role="alert">
+                {error}
+              </p>
+            )}
+            {message && <p role="status">{message}</p>}
+            <button className="secondary" disabled={busy}>
+              {busy ? "Updating..." : "Update password"}
+            </button>
+          </form>
+        </details>
       </section>
       {account.user.is_admin && <Invitations />}
     </div>
@@ -162,12 +158,8 @@ function Invitations() {
   }
   return (
     <section className="settings-card account-card">
-      <Link size={25} />
       <h2>Invite people</h2>
-      <p className="muted">
-        Administrator only. Each link creates one personal account and expires 7
-        days after creation. Share it privately with the intended person.
-      </p>
+      <p className="muted">One person per link. Expires in 7 days.</p>
       <button className="primary" disabled={busy} onClick={() => void create()}>
         <Link size={16} /> {busy ? "Please wait..." : "Create invite link"}
       </button>
@@ -182,8 +174,8 @@ function Invitations() {
             />
           </label>
           <p className="small muted">
-            Expires {new Date(link.expires_at).toLocaleString()}. This link is
-            shown only here; copy it before leaving this page.
+            Expires {new Date(link.expires_at).toLocaleString()}. Copy before
+            leaving this page.
           </p>
           <button
             className="secondary"
@@ -208,30 +200,32 @@ function Invitations() {
           {error}
         </p>
       )}
-      <h3 className="device-title">Recent invitations</h3>
-      {!invitations.length && (
-        <p className="empty-inline">No invitations yet.</p>
-      )}
-      {invitations.map((invitation) => (
-        <div className="delivery-row invitation-row" key={invitation.id}>
-          <div>
-            <strong>Invitation {invitation.id.slice(0, 8)}</strong>
-            <small>
-              Expires {new Date(invitation.expires_at).toLocaleString()}
-            </small>
+      <details className="disclosure">
+        <summary>Manage invitations ({invitations.length})</summary>
+        {!invitations.length && (
+          <p className="empty-inline">No invitations yet.</p>
+        )}
+        {invitations.map((invitation) => (
+          <div className="delivery-row invitation-row" key={invitation.id}>
+            <div>
+              <strong>Invitation {invitation.id.slice(0, 8)}</strong>
+              <small>
+                Expires {new Date(invitation.expires_at).toLocaleString()}
+              </small>
+            </div>
+            <span className="status-pill">{invitation.status}</span>
+            {invitation.status === "pending" && (
+              <button
+                className="text-button"
+                disabled={busy}
+                onClick={() => void revoke(invitation.id)}
+              >
+                Revoke
+              </button>
+            )}
           </div>
-          <span className="status-pill">{invitation.status}</span>
-          {invitation.status === "pending" && (
-            <button
-              className="text-button"
-              disabled={busy}
-              onClick={() => void revoke(invitation.id)}
-            >
-              Revoke
-            </button>
-          )}
-        </div>
-      ))}
+        ))}
+      </details>
     </section>
   );
 }

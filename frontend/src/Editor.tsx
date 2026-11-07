@@ -5,7 +5,6 @@ import {
   CalendarDays,
   Check,
   Plus,
-  ShieldCheck,
   Trash2,
   X,
 } from "lucide-react";
@@ -95,13 +94,22 @@ export function Editor({
         else onClose();
       }}
     >
-      <form onSubmit={save}>
+      <form
+        onSubmit={save}
+        onInvalidCapture={(event) => {
+          const details = (event.target as HTMLElement).closest("details");
+          if (details) details.open = true;
+        }}
+      >
         <div className="dialog-heading">
           <div>
-            <span className="eyebrow">
-              {itemId ? "MAKE IT YOURS" : "ONE QUICK CHECK"}
-            </span>
-            <h2>{itemId ? "Edit your item" : "Does this look right?"}</h2>
+            <h2>
+              {itemId
+                ? "Edit item"
+                : draft.source === "manual"
+                  ? "Add item"
+                  : "Review draft"}
+            </h2>
           </div>
           <button
             type="button"
@@ -114,9 +122,7 @@ export function Editor({
           </button>
         </div>
         {!itemId && (
-          <p className="muted">
-            This is a draft. Nothing is saved until you confirm.
-          </p>
+          <p className="muted">Nothing is saved until you confirm.</p>
         )}
         {value.warnings.map((w, i) => (
           <div className="notice" key={i}>
@@ -202,18 +208,6 @@ export function Editor({
                 </datalist>
               </label>
             </div>
-            <label>
-              Account ending in{" "}
-              <span className="optional">(optional, last 4 only)</span>
-              <input
-                inputMode="numeric"
-                pattern="[0-9]{4}"
-                maxLength={4}
-                value={value.account_last4 || ""}
-                onChange={(e) => field("account_last4", e.target.value)}
-                placeholder="1234"
-              />
-            </label>
           </>
         )}
         <div className="form-grid">
@@ -236,14 +230,6 @@ export function Editor({
             />
           </label>
         </div>
-        <label>
-          Time zone
-          <input
-            required
-            value={value.timezone}
-            onChange={(e) => field("timezone", e.target.value)}
-          />
-        </label>
         <div className="date-preview">
           <CalendarDays size={19} />
           <div>
@@ -251,6 +237,40 @@ export function Editor({
             <span>{value.timezone}</span>
           </div>
         </div>
+        <details
+          className="disclosure"
+          open={
+            draft.uncertain.includes("timezone") ||
+            draft.uncertain.includes("account_last4")
+          }
+        >
+          <summary>
+            {value.kind === "bill"
+              ? "Time zone & account details"
+              : "Change time zone"}
+          </summary>
+          <label>
+            {label("timezone", "Time zone")}
+            <input
+              required
+              value={value.timezone}
+              onChange={(e) => field("timezone", e.target.value)}
+            />
+          </label>
+          {value.kind === "bill" && (
+            <label>
+              {label("account_last4", "Account last 4 digits (optional)")}
+              <input
+                inputMode="numeric"
+                pattern="[0-9]{4}"
+                maxLength={4}
+                value={value.account_last4 || ""}
+                onChange={(e) => field("account_last4", e.target.value)}
+                placeholder="1234"
+              />
+            </label>
+          )}
+        </details>
         <label className="checkbox-label">
           <input
             type="checkbox"
@@ -267,13 +287,21 @@ export function Editor({
             }
           />
           {value.kind === "bill" ? "Already paid" : "Already completed"}
-          <span className="muted">No reminders while finished</span>
         </label>
-        <section className="rules">
+        <details className="rules disclosure">
+          <summary>
+            <span>
+              <Bell size={18} /> Reminders
+            </span>
+            <span className="muted">
+              {value.status !== "open"
+                ? "Paused"
+                : value.rules.length === 0
+                  ? "None"
+                  : value.rules.length}
+            </span>
+          </summary>
           <div className="section-heading">
-            <h3>
-              <Bell size={16} /> Reminders
-            </h3>
             <button
               type="button"
               className="text-button"
@@ -282,9 +310,11 @@ export function Editor({
               Reset defaults
             </button>
           </div>
-          <p className="muted small">
-            Past reminder times are skipped. Amounts stay out of notifications.
-          </p>
+          {value.status !== "open" && (
+            <p className="muted">
+              Reminders are paused while this item is finished.
+            </p>
+          )}
           {value.rules.map((r, i) => (
             <div className="rule-row" key={i}>
               <select
@@ -295,7 +325,7 @@ export function Editor({
                 }
               >
                 <option value="before">Minutes before</option>
-                <option value="day">Calendar day offset</option>
+                <option value="day">Days from due date</option>
               </select>
               <input
                 aria-label={`Reminder ${i + 1} offset`}
@@ -337,8 +367,7 @@ export function Editor({
             </div>
           ))}
           <p className="muted small">
-            Day offsets: −1 is the day before, 0 is the due date, +1 is the day
-            after.
+            Days: -1 = before, 0 = due date, +1 = after. Past times are skipped.
           </p>
           <button
             type="button"
@@ -353,7 +382,7 @@ export function Editor({
           >
             <Plus size={15} /> Add reminder
           </button>
-        </section>
+        </details>
         {!!value.duplicates.length && (
           <label className="checkbox-label notice">
             <input
@@ -371,9 +400,14 @@ export function Editor({
           </p>
         )}
         <div className="dialog-footer">
-          <span>
-            <ShieldCheck size={15} /> Just for you
-          </span>
+          <button
+            type="button"
+            className="secondary"
+            disabled={busy}
+            onClick={onClose}
+          >
+            Cancel
+          </button>
           <button type="submit" className="primary" disabled={busy}>
             {busy ? "Saving…" : itemId ? "Save changes" : "Confirm & save"}
             <Check size={17} />

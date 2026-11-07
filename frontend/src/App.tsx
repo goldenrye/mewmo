@@ -3,7 +3,6 @@ import { Capacitor } from "@capacitor/core";
 import { PushNotifications } from "@capacitor/push-notifications";
 import {
   ArrowRight,
-  ArrowUpRight,
   Bell,
   CalendarDays,
   Check,
@@ -18,8 +17,6 @@ import {
   Plus,
   Search,
   Settings2,
-  ShieldCheck,
-  Sparkles,
   Upload,
   X,
 } from "lucide-react";
@@ -114,48 +111,16 @@ function Login({
     <div className="login-page">
       <div className="login-story">
         <Brand />
-        <div>
-          <span className="eyebrow">YOUR PERSONAL PEACE OF MIND</span>
-          <h1>
-            Life has a lot
-            <br />
-            of little things.
-            <br />
-            <em>Let them go here.</em>
-          </h1>
-          <p>
-            Bills, appointments, and the things you don’t want to forget. One
-            quiet place to keep them all.
-          </p>
-        </div>
-        <div className="login-loop">
-          <span>
-            <Plus size={16} /> Capture
-          </span>
-          <ArrowRight size={16} />
-          <span>
-            <Check size={16} /> Confirm
-          </span>
-          <ArrowRight size={16} />
-          <span>
-            <Bell size={16} /> Remember
-          </span>
-        </div>
+        <p>Bills and reminders, in one place.</p>
       </div>
       <div className="login-form">
         <form onSubmit={submit}>
-          <span className="welcome-icon">
-            <ShieldCheck size={28} />
-          </span>
-          <span className="eyebrow">A SPACE THAT’S JUST YOURS</span>
           <h2>
             {register ? "Create your private account" : "Welcome to Mewmo"}
           </h2>
-          <p className="muted">
-            {register
-              ? "Join with an invitation from your administrator. Links expire after 7 days and work once."
-              : "Sign in to take a little off your mind."}
-          </p>
+          {register && (
+            <p className="muted">An invitation is required to join.</p>
+          )}
           {register && (
             <>
               <label>
@@ -219,7 +184,9 @@ function Login({
                   onChange={(e) => setConfirmation(e.target.value)}
                 />
               </label>
-              <small id="signup-password-hint">Use at least 12 characters.</small>
+              <small id="signup-password-hint">
+                Use at least 12 characters.
+              </small>
             </>
           )}
           {error && (
@@ -228,16 +195,9 @@ function Login({
             </p>
           )}
           <button className="primary" disabled={busy}>
-            {busy
-              ? "Please wait..."
-              : register
-                ? "Create account"
-                : "Come on in"}
+            {busy ? "Please wait..." : register ? "Create account" : "Sign in"}
             <ArrowRight size={18} />
           </button>
-          <p className="login-footnote">
-            <ShieldCheck size={14} /> Your items are private to your account.
-          </p>
           <button
             type="button"
             className="text-button auth-toggle"
@@ -249,9 +209,7 @@ function Login({
               setConfirmation("");
             }}
           >
-            {register
-              ? "Already have an account? Sign in"
-              : "Have an invitation? Create an account"}
+            {register ? "Back to sign in" : "Have an invitation? Join Mewmo"}
           </button>
         </form>
       </div>
@@ -377,11 +335,9 @@ function ItemDetail({
           <h3>
             <Bell size={17} /> Reminder delivery
           </h3>
-          <span className="muted small">Refreshes every 15s</span>
         </div>
         <p className="muted small">
-          “Sent” means accepted by the push service, not necessarily read or
-          displayed on your device.
+          Sent means accepted by the push service, not read.
         </p>
         {loading && <p className="muted">Loading reminder status…</p>}
         {!loading && !reminders.length && (
@@ -402,16 +358,23 @@ function ItemDetail({
                   minute: "2-digit",
                 })}
               </strong>
-              <small>
-                {r.attempts} delivery attempt{r.attempts === 1 ? "" : "s"}
-                {r.error && ` · ${r.error.replaceAll("_", " ")}`}
-              </small>
-              {r.deliveries.map((d, i) => (
-                <small key={i}>
-                  {d.platform === "ios" ? "iPhone" : "Web"}: {d.status}
-                  {d.error && ` (${d.error.replaceAll("_", " ")})`}
-                </small>
-              ))}
+              {r.error && (
+                <p className="delivery-error">{r.error.replaceAll("_", " ")}</p>
+              )}
+              {(r.attempts > 0 || r.deliveries.length > 0) && (
+                <details className="delivery-details">
+                  <summary>Delivery details</summary>
+                  <p>
+                    {r.attempts} attempt{r.attempts === 1 ? "" : "s"}
+                  </p>
+                  {r.deliveries.map((d, i) => (
+                    <p key={i}>
+                      {d.platform === "ios" ? "iPhone" : "Web"}: {d.status}
+                      {d.error && ` (${d.error.replaceAll("_", " ")})`}
+                    </p>
+                  ))}
+                </details>
+              )}
             </div>
             <span className={`status-pill ${r.status}`}>{r.status}</span>
           </div>
@@ -694,10 +657,10 @@ function Workspace({
       setToast({
         message:
           undo || item.status !== "open"
-            ? "Item reopened. Future reminders restored."
+            ? "Item reopened."
             : item.kind === "bill"
-              ? "Bill marked as paid. One less thing."
-              : "All done. Reminders stopped.",
+              ? "Marked as paid."
+              : "Completed.",
         undo: !undo && item.status === "open" ? item : undefined,
       });
       await refresh();
@@ -722,11 +685,6 @@ function Workspace({
     }
   }
   const overdue = items.filter((i) => new Date(i.due_at).getTime() < clock);
-  const nextWeek = items.filter(
-    (i) =>
-      new Date(i.due_at).getTime() >= clock &&
-      new Date(i.due_at).getTime() < clock + 7 * 86400000,
-  );
   const source = page === "history" ? finished : items;
   const visible = source.filter(
     (i) =>
@@ -824,12 +782,12 @@ function Workspace({
     <div className="app-shell">
       <aside className="sidebar">
         <Brand />
-        <div className="workspace-label">YOUR PERSONAL SPACE</div>
-        <nav>
+        <nav aria-label="Main navigation">
           {navigation.map(({ key, label, icon: Icon }) => (
             <button
               key={key}
               className={page === key ? "active" : ""}
+              aria-current={page === key ? "page" : undefined}
               onClick={() => navigate(key)}
             >
               <Icon size={19} />
@@ -840,17 +798,6 @@ function Workspace({
             </button>
           ))}
         </nav>
-        <div className="sidebar-note">
-          <span className="note-art">
-            <CheckCheck size={30} />
-          </span>
-          <h3>A little less to carry.</h3>
-          <p>
-            You remember to live.
-            <br />
-            Mewmo remembers the rest.
-          </p>
-        </div>
         <div className="sidebar-bottom">
           <button
             className={page === "settings" ? "active" : ""}
@@ -878,10 +825,7 @@ function Workspace({
       </aside>
       <div className="main-shell">
         <header className="topbar">
-          <div className="breadcrumb">
-            My space <ChevronRight size={13} />
-            <strong>{page[0].toUpperCase() + page.slice(1)}</strong>
-          </div>
+          <span className="topbar-name">Mewmo</span>
           <div className="topbar-right">
             <span className="today-label">
               <CalendarDays size={15} />
@@ -907,38 +851,20 @@ function Workspace({
         <main>
           <div className="page-heading">
             <div>
-              <span className="eyebrow">
-                {page === "history"
-                  ? "LOOK HOW FAR YOU’VE COME"
-                  : "A CLEARER HEAD STARTS HERE"}
-              </span>
-              <h1>
-                {page === "overview"
-                  ? "A little less on your mind."
-                  : page === "calendar"
-                    ? "Make room for what’s next."
-                    : page === "history"
-                      ? "Taken care of."
-                      : page === "notifications"
-                        ? "A timely little nudge."
-                        : "Your space, your way."}
-              </h1>
-              <p>
-                {page === "overview"
-                  ? "Keep life’s little to-dos in one calm place."
-                  : page === "history"
-                    ? "Your finished bills, appointments, and reminders."
-                    : page === "calendar"
-                      ? "The days ahead, with nothing slipping through."
-                      : page === "notifications"
-                        ? "Choose where Mewmo reminds you. Your amounts stay private."
-                        : "Simple settings for your personal Mewmo."}
-              </p>
+              <h1>{page[0].toUpperCase() + page.slice(1)}</h1>
+              {page === "overview" && (
+                <p>
+                  {items.length} open
+                  {overdue.length > 0 ? ` · ${overdue.length} overdue` : ""}
+                </p>
+              )}
             </div>
-            <button className="primary add-item" onClick={() => newItem()}>
-              <Plus size={17} />
-              Add item
-            </button>
+            {(page === "overview" || page === "calendar") && (
+              <button className="primary add-item" onClick={() => newItem()}>
+                <Plus size={20} />
+                Add item
+              </button>
+            )}
           </div>
           {error && (
             <div className="error global-error" role="alert">
@@ -968,18 +894,7 @@ function Workspace({
                 }}
               >
                 <div className="capture-heading">
-                  <span>
-                    <Sparkles size={20} />
-                  </span>
-                  <div>
-                    <h2>What’s on your mind?</h2>
-                    <p>
-                      Type it, drop in a bill, or use your keyboard’s dictation.
-                    </p>
-                  </div>
-                  <span className="draft-badge">
-                    <ShieldCheck size={13} /> You’re always in control
-                  </span>
+                  <h2>Add a reminder</h2>
                 </div>
                 <div className="capture-input">
                   <textarea
@@ -988,7 +903,7 @@ function Workspace({
                     aria-label="Natural language input"
                     value={text}
                     onChange={(e) => setText(e.target.value)}
-                    placeholder="e.g. Dentist next Friday at 10am, or 这个月水电 120 刀，已付"
+                    placeholder="e.g. Dentist tomorrow at 9am"
                     onKeyDown={(e) => {
                       if (
                         e.key === "Enter" &&
@@ -1022,12 +937,8 @@ function Workspace({
                       <Upload size={15} />
                       Import a bill
                     </button>
-                    <span className="divider" />
-                    <span>PDF, image, or photo</span>
                   </div>
-                  <span>
-                    Nothing saved until you confirm <Check size={14} />
-                  </span>
+                  <span>Review before saving</span>
                 </div>
                 {parsing && (
                   <p className="small muted" role="status">
@@ -1043,60 +954,6 @@ function Workspace({
                   </div>
                 )}
               </section>
-              <div className="stats-grid">
-                <button
-                  className="stat-card"
-                  onClick={() => {
-                    setFilter("all");
-                    document
-                      .getElementById("items-list")
-                      ?.scrollIntoView({ behavior: "smooth" });
-                  }}
-                >
-                  <span className="stat-label">
-                    Open items <LayoutDashboard size={16} />
-                  </span>
-                  <strong>{items.length.toString().padStart(2, "0")}</strong>
-                  <span>Little things on your list</span>
-                </button>
-                <button
-                  className="stat-card"
-                  onClick={() => {
-                    setFilter("all");
-                    document
-                      .getElementById("items-list")
-                      ?.scrollIntoView({ behavior: "smooth" });
-                  }}
-                >
-                  <span className="stat-label">
-                    Coming up <CalendarDays size={16} />
-                  </span>
-                  <strong>
-                    {nextWeek.length.toString().padStart(2, "0")}
-                    <small>this week</small>
-                  </strong>
-                  <span>In the next 7 days</span>
-                </button>
-                <button
-                  className={`stat-card ${overdue.length ? "has-overdue" : ""}`}
-                  onClick={() => {
-                    setFilter("all");
-                    document
-                      .getElementById("items-list")
-                      ?.scrollIntoView({ behavior: "smooth" });
-                  }}
-                >
-                  <span className="stat-label">
-                    Needs attention <Clock3 size={16} />
-                  </span>
-                  <strong>{overdue.length.toString().padStart(2, "0")}</strong>
-                  <span>
-                    {overdue.length
-                      ? "A gentle nudge to catch up"
-                      : "Nothing overdue. Breathe easy."}
-                  </span>
-                </button>
-              </div>
             </>
           )}
           {page === "calendar" && (
@@ -1123,7 +980,7 @@ function Workspace({
                             "en-US",
                             { month: "long", day: "numeric" },
                           )
-                        : "On your radar"}
+                        : "Your items"}
                     <span className="count">{visible.length}</span>
                   </h2>
                   <label className="search-box">
@@ -1157,7 +1014,7 @@ function Workspace({
                     ))}
                   </div>
                   <span className="sort-label">
-                    {page === "history" ? "Recently finished" : "By due date"}
+                    {page === "history" ? "Latest first" : "Due date"}
                   </span>
                 </div>
                 {loading ? (
@@ -1182,9 +1039,7 @@ function Workspace({
                               <div
                                 className={`group-label ${late ? "late" : ""}`}
                               >
-                                {late
-                                  ? "NEEDS A LITTLE ATTENTION"
-                                  : "COMING UP"}
+                                {late ? "Overdue" : "Upcoming"}
                               </div>
                             )}
                           <article className="item-row">
@@ -1207,9 +1062,7 @@ function Workspace({
                                     },
                                   )}{" "}
                                   · {item.due_time}
-                                  {late
-                                    ? " · Overdue"
-                                    : ` · ${kindName[item.kind]}`}
+                                  {late ? " · Overdue" : ""}
                                 </span>
                               </span>
                               <span className="item-amount">{money(item)}</span>
@@ -1256,21 +1109,21 @@ function Workspace({
                     </span>
                     <h3>
                       {search
-                        ? "Nothing by that name."
+                        ? "No matching items"
                         : page === "history"
-                          ? "Good things take a little time."
+                          ? "No finished items"
                           : day
-                            ? "A little breathing room."
-                            : "A clear list. A clearer head."}
+                            ? "Nothing scheduled"
+                            : "No open items"}
                     </h3>
                     <p>
                       {search
-                        ? "Try another word or a different filter."
+                        ? "Try another search or filter."
                         : page === "history"
-                          ? "Finished items will find their home right here."
+                          ? "Paid and completed items appear here."
                           : day
-                            ? "There’s nothing scheduled for this day."
-                            : "Add a bill, an appointment, or something to remember."}
+                            ? "Choose another day or add an item."
+                            : "Add a bill, appointment, or reminder."}
                     </p>
                     {page !== "history" && !search && (
                       <button className="text-button" onClick={() => newItem()}>
@@ -1280,66 +1133,15 @@ function Workspace({
                     )}
                   </div>
                 )}
-                <div className="list-bottom">
-                  <ShieldCheck size={14} />
-                  <span>
-                    {page === "history"
-                      ? "Reopen any item to restore its future reminders."
-                      : "A small step today. One less thing tomorrow."}
-                  </span>
-                </div>
               </section>
-              <aside className="right-rail">
-                {page !== "calendar" && calendar}
-                <div className="reminder-card">
-                  <span className="rail-icon">
-                    <Bell size={21} />
-                  </span>
-                  <h3>A nudge, not a worry.</h3>
-                  <p>
-                    {devices.some((d) => d.active)
-                      ? "Your reminders are ready. Open any item to see its delivery status."
-                      : "Enable notifications so the important things find you, right on time."}
-                  </p>
-                  <button
-                    className="text-button"
-                    disabled={pushBusy}
-                    onClick={() =>
-                      devices.some((d) => d.active)
-                        ? navigate("notifications")
-                        : void enablePush()
-                    }
-                  >
-                    {pushBusy
-                      ? "Connecting…"
-                      : devices.some((d) => d.active)
-                        ? "Notification settings"
-                        : "Enable notifications"}
-                    <ArrowUpRight size={16} />
-                  </button>
-                </div>
-                <div className="privacy-note">
-                  <ShieldCheck size={16} />
-                  <span>
-                    Your bills stay private.
-                    <br />
-                    Original files are never kept.
-                  </span>
-                </div>
-              </aside>
             </div>
           )}
-          {(page === "notifications" || page === "settings") && (
+          {page === "notifications" && (
             <div className="settings-grid">
               <section className="settings-card">
-                <span className="welcome-icon">
-                  <Bell size={25} />
-                </span>
-                <h2>Never miss the little things.</h2>
+                <h2>Remind me on this device</h2>
                 <p className="muted">
-                  Enable notifications separately on each device you use. Every
-                  reminder appears separately, with the title and time but never
-                  the amount.
+                  Notifications show titles and times, never amounts.
                 </p>
                 <button
                   className="primary"
@@ -1380,49 +1182,49 @@ function Workspace({
                     )}
                   </div>
                 ))}
-              </section>
-              <section className="settings-card">
-                <span className="welcome-icon">
-                  <ShieldCheck size={25} />
-                </span>
-                <h2>Personal means private.</h2>
-                <div className="setting-line">
-                  <strong>Time zone</strong>
-                  <span>{context().timezone}</span>
-                </div>
-                <p className="muted small">
-                  Taken from this device with every capture. Each item keeps its
-                  own time zone.
-                </p>
-                <div className="setting-line">
-                  <strong>File storage</strong>
-                  <span>Originals discarded</span>
-                </div>
-                <p className="muted small">
-                  PDFs and images are parsed locally on your server. Only the
-                  last 4 account digits can be stored.
-                </p>
-                <div className="setting-line">
-                  <strong>Voice input</strong>
-                  <span>Keyboard dictation</span>
-                </div>
-                <p className="muted small">
-                  Use the dictation key on your iPhone keyboard. Mewmo doesn’t
-                  access your microphone.
-                </p>
-                <div className="setting-line">
-                  <strong>Delivery checks</strong>
-                  <span>Every 60 seconds</span>
-                </div>
-                <p className="muted small">
-                  Failed sends retry automatically. Open an item for its
-                  per-reminder delivery status. Provider acceptance is not a
-                  guarantee of display.
-                </p>
+                <details className="disclosure">
+                  <summary>How reminders work</summary>
+                  <p>
+                    Enable each device separately. Open an item to check
+                    delivery status.
+                  </p>
+                  <p>
+                    We check every minute and retry failed sends. Sent means the
+                    push service accepted a reminder, not that it was displayed.
+                  </p>
+                </details>
               </section>
             </div>
           )}
           {page === "settings" && <AccountSettings account={account} />}
+          {page === "settings" && (
+            <details className="settings-card disclosure privacy-settings">
+              <summary>Privacy &amp; preferences</summary>
+              <div className="setting-line">
+                <strong>Time zone</strong>
+                <span>{context().timezone}</span>
+              </div>
+              <p className="muted">
+                New items use this device's time zone. You can change it per
+                item.
+              </p>
+              <div className="setting-line">
+                <strong>Files</strong>
+                <span>Discarded after parsing</span>
+              </div>
+              <p className="muted">
+                Only the last 4 account digits are stored.
+              </p>
+              <div className="setting-line">
+                <strong>Voice input</strong>
+                <span>Keyboard dictation</span>
+              </div>
+              <p className="muted">
+                Use your iPhone keyboard's dictation key. Mewmo does not access
+                your microphone.
+              </p>
+            </details>
+          )}
           {page === "settings" && (
             <button
               className="secondary signout-settings"
@@ -1431,10 +1233,6 @@ function Workspace({
               <LogOut size={16} /> Sign out
             </button>
           )}
-          <footer className="page-footer">
-            <span>Less mental clutter. More room for life.</span>
-            <span>Made for your everyday.</span>
-          </footer>
         </main>
       </div>
       <input
@@ -1444,15 +1242,23 @@ function Workspace({
         accept="application/pdf,image/*"
         onChange={(e) => void importFile(e.target.files?.[0])}
       />
-      <nav className="mobile-nav">
+      <nav className="mobile-nav" aria-label="Mobile navigation">
         {navigation.map(({ key, label, icon: Icon }) => (
           <button
             key={key}
             className={page === key ? "active" : ""}
+            aria-label={label}
+            aria-current={page === key ? "page" : undefined}
             onClick={() => navigate(key)}
           >
             <Icon size={20} />
-            <span>{label}</span>
+            <span>
+              {key === "overview"
+                ? "Home"
+                : key === "notifications"
+                  ? "Alerts"
+                  : label}
+            </span>
           </button>
         ))}
         <button
@@ -1476,9 +1282,7 @@ function Workspace({
             setEditId(undefined);
             setText("");
             setToast({
-              message: editId
-                ? "Changes saved. Reminders updated."
-                : "Saved. A little less on your mind.",
+              message: editId ? "Changes saved." : "Item saved.",
             });
             void refresh().catch((e) => setError(e.message));
           }}
