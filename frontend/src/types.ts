@@ -58,6 +58,14 @@ export type User = {
 };
 export type Account = { user: User; vapid_public_key: string };
 export type AuthResult = Account & { token: string | null };
+export type ModelSettings = {
+  available: boolean;
+  provider: "openai" | "anthropic" | "gemini";
+  model: string;
+  has_key: boolean;
+  enabled: boolean;
+  allow_images: boolean;
+};
 export type Invitation = {
   id: string;
   created_at: string;

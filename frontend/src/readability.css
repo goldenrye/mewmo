@@ -374,6 +374,49 @@ main {
 .account-settings {
   margin-top: 0;
 }
+.ai-settings fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.ai-settings select {
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 12px;
+  font: inherit;
+  color: inherit;
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.ai-toggle,
+.account-card label.ai-toggle {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 12px;
+  min-height: 44px;
+  font-size: 1rem;
+  cursor: pointer;
+}
+.ai-toggle input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  min-height: 20px;
+  flex: 0 0 20px;
+  margin: 3px 0 0;
+  accent-color: var(--green);
+}
+.ai-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 16px;
+}
+.ai-actions > p {
+  flex-basis: 100%;
+}
 .settings-card {
   padding: 24px;
 }

@@ -15,10 +15,12 @@ from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from .accounts import router as accounts_router
+from .ai_assistance import assist_draft
 from .auth import client_key_hash, require_user
 from .config import settings
 from .database import session
-from .models import Delivery, Device, Item, Reminder, User, now
+from .model_settings import router as model_settings_router
+from .models import Delivery, Device, Item, ModelPreference, Reminder, User, now
 from .parsing import ParseFailure, extract_file, parse_bill, parse_text
 from .push import valid_web_endpoint
 from .reminders import reconcile
@@ -153,7 +155,9 @@ def duplicates(db: Session, draft: Draft, user_id: str) -> Draft:
 
 @router.post("/drafts/text", response_model=Draft)
 def text_draft(body: ParseRequest, db: Session = Depends(session), user: User = Depends(require_user)):
-    return duplicates(db, parse_text(body), user.id)
+    draft = parse_text(body)
+    draft = assist_draft(db.get(ModelPreference, user.id), draft, body, body.text)
+    return duplicates(db, draft, user.id)
 
 
 @router.post("/drafts/file", response_model=Draft)
@@ -161,6 +165,8 @@ async def file_draft(
     request: Request,
     local_date: date,
     timezone: str,
+    use_image_ai: bool = False,
+    image_provider: str | None = None,
     db: Session = Depends(session),
     user: User = Depends(require_user),
 ):
@@ -176,9 +182,39 @@ async def file_draft(
             data.extend(chunk)
             if len(data) > 12 * 1024 * 1024:
                 raise HTTPException(413, "Files must be no larger than 12 MB.")
-        extracted = await run_in_threadpool(extract_file, bytes(data))
+        preference = db.get(ModelPreference, user.id)
+        if use_image_ai and not (preference and preference.enabled and preference.allow_images):
+            raise HTTPException(400, "Enable image analysis in AI settings before using it for an import.")
+        if use_image_ai and image_provider != preference.provider:
+            raise HTTPException(400, "AI settings changed. Review them and opt in to image analysis again.")
+        image_data = bytes(data) if use_image_ai else None
+        extracted, draft, failure = "", None, None
+        try:
+            extracted = await run_in_threadpool(extract_file, bytes(data))
+            draft = parse_bill(extracted, context)
+        except ParseFailure as error:
+            failure = error
         data.clear()
-        draft = parse_bill(extracted, context)
+        if draft is not None or extracted or image_data:
+            draft = await run_in_threadpool(
+                assist_draft,
+                preference,
+                draft,
+                context,
+                extracted,
+                image_data,
+            )
+        if draft is None:
+            raise failure or ParseFailure(
+                "We could not read this file. Try a clearer image or enter it manually."
+            )
+        if (
+            "Review every field. OCR can make mistakes. The original file has been discarded."
+            not in draft.warnings
+        ):
+            draft.warnings.append(
+                "Review every field. OCR can make mistakes. The original file has been discarded."
+            )
         return duplicates(db, draft, user.id)
     except ParseFailure as error:
         raise HTTPException(422, str(error))
@@ -385,3 +421,4 @@ def disable_device(device_id: str, db: Session = Depends(session), user: User = 
 
 app.include_router(router)
 app.include_router(accounts_router)
+app.include_router(model_settings_router)

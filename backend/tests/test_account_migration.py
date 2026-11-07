@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import password_hash, verify_password
 from app.config import settings
-from app.models import AuthSession, Delivery, Device, Item, Reminder, User
+from app.models import AuthSession, Delivery, Device, Item, ModelPreference, Reminder, User
 
 
 def test_upgrade_preserves_legacy_data_and_creates_admin(tmp_path, monkeypatch):
@@ -107,6 +107,8 @@ def test_upgrade_preserves_legacy_data_and_creates_admin(tmp_path, monkeypatch):
         assert db.get(Reminder, "legacy-reminder").status == "sent"
         assert db.get(Delivery, "legacy-delivery").device_id == "legacy-device"
         assert db.scalar(select(AuthSession)) is None
+        assert db.scalar(select(ModelPreference)) is None
+    assert "model_preferences" in inspect(engine).get_table_names()
     for name in ("items", "devices", "auth_sessions"):
         assert (
             next(c for c in inspect(engine).get_columns(name) if c["name"] == "user_id")["nullable"] is False

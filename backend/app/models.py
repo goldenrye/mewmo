@@ -2,7 +2,7 @@ import uuid
 from datetime import UTC, datetime
 from decimal import Decimal
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Index, Numeric, String, UniqueConstraint
+from sqlalchemy import JSON, DateTime, ForeignKey, Index, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.types import TypeDecorator
 
@@ -56,6 +56,16 @@ class Invitation(Base):
     used_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"))
     used_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     revoked_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+
+
+class ModelPreference(Base):
+    __tablename__ = "model_preferences"
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    provider: Mapped[str] = mapped_column(String(20))
+    model: Mapped[str] = mapped_column(String(120))
+    encrypted_key: Mapped[str] = mapped_column(Text)
+    enabled: Mapped[bool] = mapped_column(default=False)
+    allow_images: Mapped[bool] = mapped_column(default=False)
 
 
 class Item(Base):

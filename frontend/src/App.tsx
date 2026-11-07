@@ -55,6 +55,7 @@ import {
   type Draft,
   type Item,
   type Kind,
+  type ModelSettings,
   type Reminder,
 } from "./types";
 
@@ -607,6 +608,10 @@ function Workspace({
   const [text, setText] = useState("");
   const [parsing, setParsing] = useState(false);
   const [importError, setImportError] = useState("");
+  const [modelSettings, setModelSettings] = useState<ModelSettings | null>(
+    null,
+  );
+  const [imageAI, setImageAI] = useState(false);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [editId, setEditId] = useState<string>();
   const [selected, setSelected] = useState<Item | null>(null);
@@ -624,6 +629,20 @@ function Workspace({
   const file = useRef<HTMLInputElement>(null);
   const capture = useRef<HTMLTextAreaElement>(null);
   const today = context().local_date;
+  useEffect(() => {
+    let live = true;
+    setImageAI(false);
+    void api<ModelSettings>("/model-settings")
+      .then((value) => {
+        if (live) setModelSettings(value);
+      })
+      .catch(() => {
+        if (live) setModelSettings(null);
+      });
+    return () => {
+      live = false;
+    };
+  }, [page]);
   const refresh = useCallback(async () => {
     const [open, history, registered] = await Promise.all([
       api<Item[]>("/items"),
@@ -707,6 +726,10 @@ function Workspace({
     setImportError("");
     try {
       const query = new URLSearchParams(context());
+      if (imageAI && modelSettings?.enabled && modelSettings.allow_images) {
+        query.set("use_image_ai", "true");
+        query.set("image_provider", modelSettings.provider);
+      }
       const result = await api<Draft>(`/drafts/file?${query}`, {
         method: "POST",
         body: value,
@@ -718,6 +741,7 @@ function Workspace({
       setImportError((e as Error).message);
     } finally {
       setParsing(false);
+      setImageAI(false);
       if (file.current) file.current.value = "";
     }
   }
@@ -1053,6 +1077,30 @@ function Workspace({
                   </div>
                   <span>{t("Review before saving")}</span>
                 </div>
+                {modelSettings?.enabled && (
+                  <p className="small muted">
+                    {t(
+                      "AI-assisted capture is on. New input is sent to your selected provider.",
+                    )}
+                  </p>
+                )}
+                {modelSettings?.available &&
+                  modelSettings.enabled &&
+                  modelSettings.allow_images && (
+                    <label className="ai-toggle">
+                      <input
+                        type="checkbox"
+                        checked={imageAI}
+                        disabled={parsing}
+                        onChange={(event) => setImageAI(event.target.checked)}
+                      />
+                      <span>
+                        {t(
+                          "Send bill images to my AI provider for this import",
+                        )}
+                      </span>
+                    </label>
+                  )}
                 {parsing && (
                   <p className="small muted" role="status">
                     {t(
@@ -1322,7 +1370,15 @@ function Workspace({
               </section>
             </div>
           )}
-          {page === "settings" && <AccountSettings account={account} />}
+          {page === "settings" && (
+            <AccountSettings
+              account={account}
+              onModelChange={(value) => {
+                setModelSettings(value);
+                setImageAI(false);
+              }}
+            />
+          )}
           {page === "settings" && (
             <details className="settings-card disclosure privacy-settings">
               <summary>{t("Privacy & preferences")}</summary>

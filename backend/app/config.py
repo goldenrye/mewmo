@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     vapid_private_key: str = ""
     vapid_public_key: str = ""
     vapid_subject: str = "mailto:owner@example.com"
+    llm_encryption_key: str = ""
 
     @property
     def origins(self) -> list[str]:

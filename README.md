@@ -7,7 +7,7 @@ An invite-only, multi-user bill and reminder app. Each person has a private acco
 - FastAPI, SQLAlchemy 2, PostgreSQL 16, Alembic.
 - React, TypeScript, Vite. The same UI runs on the web and in Capacitor 8 on iPhone.
 - APNs for iPhone and Web Push for browsers.
-- Local Poppler, Tesseract (English and simplified Chinese), and Pillow/HEIF decoding. No external AI service receives documents.
+- Local Poppler, Tesseract (English and simplified Chinese), and Pillow/HEIF decoding by default. Optional per-user AI assistance can send content to the user's selected provider with consent.
 - A dedicated Docker Compose project, PostgreSQL container/volume, networks, credentials, and backup directory. Nothing mounts or connects to rental-mgmt.
 
 ## Implemented
@@ -16,6 +16,7 @@ An invite-only, multi-user bill and reminder app. Each person has a private acco
 - In-memory drafts with uncertain fields, manual fallback, possible duplicate warnings, and account-number redaction.
 - Chinese/English/mixed text capture. iPhone voice input uses the system keyboard's dictation; no microphone control or permission.
 - English and Simplified Chinese interfaces, with automatic device-language detection and a saved language selector.
+- Optional per-user OpenAI, Anthropic, or Gemini model settings, encrypted API keys, connection testing, and per-import image consent.
 - Full date, weekday, time, and IANA zone on every confirmation card.
 - Manual create/edit/delete, overdue-first home, search, calendar, one-tap paid/completed, undo, and history.
 - Editable reminder rules; each fire time has a database row and per-device delivery audit.
@@ -30,13 +31,39 @@ Parsing is deliberately conservative, not an open-ended AI assistant. Common rel
 
 ### Local Bill Extraction
 
-Bill import uses local OCR and deterministic field matching, with no LLM or external document service. It supports paired column headings such as `Due date / Amount due`, values on nearby lines, and repeated matching totals. Conflicting totals or dates stay blank; a candidate with an unreadable repeated label remains flagged for review.
+By default, bill import uses local OCR and deterministic field matching, with no LLM or external document service. It supports paired column headings such as `Due date / Amount due`, values on nearby lines, and repeated matching totals. Conflicting totals or dates stay blank; a candidate with an unreadable repeated label remains flagged for review.
 
 Payees can come from explicit English/Chinese labels, short company-like headers, or phrases such as `valued Boost Mobile customer`. Inferred payees and titles always show **Check this**. Dollar symbols alone still require currency confirmation. File dates require an explicit year and unambiguous ordering: `NOV 12, 2026` works, while `11/12/2026` requires manual confirmation. Natural-language relative-date parsing is unchanged.
 
 Matching stops at unrelated fields such as bill periods, previous balances, autopay, and card expiry. Scheduled autopay never marks a bill paid. Only the account's last four digits are returned; original files and OCR intermediates remain temporary. This is not a general document-understanding engine: blurry text, unfamiliar layouts, and logos without readable issuer text may still need manual entry.
 
 Regression coverage includes a synthetic Boost-style OCR transcript yielding **Boost Mobile / 61.78 / November 12, 2026**, with the inferred payee and currency flagged. Generated two-column PNG/PDF/HEIF tests require Tesseract and Poppler; transcript tests do not prove extraction from a particular original image. This is a backend change: deploying the updated API enables it for both browser and iPhone imports without rebuilding the iPhone app.
+
+## Optional AI Assistance
+
+Open **Settings > AI assistance > Configure model**. Each user can save one provider, model ID, and API key. Supported APIs are OpenAI Chat Completions with JSON output, Anthropic Messages, and Google Gemini `generateContent`. Use a model available to your provider account; custom endpoints and local model servers are not supported. Keys are encrypted on the Mewmo server, never returned by the API, and never stored in browser storage. Leaving the key blank preserves it; changing providers requires a new key and fresh consent in the UI.
+
+AI is **off by default**. Enabling it sends new typed input or extracted OCR text to that provider to suggest draft fields. Recognizable account numbers are redacted, but this is best-effort redaction, not anonymization: names, addresses, amounts, or other personal details may remain. Input is limited to the first 12,000 characters. There is no background processing of saved items, chat agent, automatic payment, or AI access to reminder dispatch or other accounts.
+
+**Allow optional image analysis** makes a separate checkbox available on the capture card. Check it for each import that should send bill images to the provider; it resets after the attempt or leaving the page. Images can contain full account details and are not text-redacted. Mewmo strips metadata and converts images or up to five PDF pages to bounded PNGs (2,000-pixel maximum dimension, 8 MB total base64 payload); PDF conversion requires Poppler. Provider retention policies still apply even though Mewmo discards originals and intermediate files. A provider change invalidates pending image consent.
+
+AI suggestions can fill missing or uncertain fields; they cannot overwrite confident local values silently. Disagreements are flagged for review. Model output is schema-validated and cannot supply payment status, account IDs, reminder rules, or actions. Imported bills stay open even if the document mentions autopay. Nothing is saved until the existing confirmation step. Timeouts, invalid output, unavailable models, and rate limits fall back to the local draft; if neither local parsing nor AI can extract a bill, manual entry is offered.
+
+**Test saved model** sends only a synthetic request, can incur provider charges, and checks text/JSON connectivity, not vision support. Image analysis requires a vision-capable model. Use **Remove model** to delete the encrypted credential and revert to local-only capture. Disabling AI stops subsequent requests; it cannot recall requests already in flight or delete copies held by the provider. Provider usage is billed to the user's account. The app limits assistance to 30 requests and connection tests to 5 requests per user per five minutes, with four simultaneous provider calls per API process, a 30-second network timeout, and bounded responses.
+
+### Server Setup
+
+Before users can save keys, generate a Fernet encryption key using the backend environment:
+
+```bash
+python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'
+```
+
+Set `LLM_ENCRYPTION_KEY` in the server's private `.env` (or `backend/.env` for local development). Never commit it. Keep it stable across restarts and store a backup separately from the database backups. Database backups contain encrypted provider credentials; restoring them without the same encryption key makes them unusable. There is no automatic key rotation: users must re-enter provider keys after changing or losing this key. Missing or invalid encryption configuration disables saving and provider calls, while local parsing and credential removal remain available.
+
+Deploy the backend and web client using the existing upgrade procedure, including `alembic upgrade head` / the Compose `migrate` service. Migration `0003` adds a separate per-user settings table without enabling AI for existing users or changing their items. Rebuild/sync/reinstall the iPhone client for the new settings and consent controls. Do not place provider keys or `LLM_ENCRYPTION_KEY` in any `VITE_*` variable.
+
+Automated tests use mocked provider responses and a disposable database; they do not make paid requests or prove compatibility with every provider model. Validate your selected model with the connection test and a non-sensitive sample before uploading a real bill.
 
 ## Language
 

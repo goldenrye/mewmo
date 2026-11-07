@@ -4,9 +4,16 @@ import { useEffect, useState } from "react";
 import { Copy, Link } from "lucide-react";
 import { api } from "./api";
 import { BiometricSettings } from "./BiometricSettings";
-import type { Account, Invitation } from "./types";
+import { AISettings } from "./AISettings";
+import type { Account, Invitation, ModelSettings } from "./types";
 
-export function AccountSettings({ account }: { account: Account }) {
+export function AccountSettings({
+  account,
+  onModelChange,
+}: {
+  account: Account;
+  onModelChange: (value: ModelSettings) => void;
+}) {
   const [current, setCurrent] = useState("");
   const [password, setPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
@@ -100,6 +107,7 @@ export function AccountSettings({ account }: { account: Account }) {
           </form>
         </details>
       </section>
+      <AISettings onChange={onModelChange} />
       {account.user.is_admin && <Invitations />}
     </div>
   );
