@@ -188,22 +188,13 @@ button:hover {
   color: #9cb18a;
 }
 .brand-mark {
-  background: var(--green);
   border-radius: 11px;
-  width: 35px;
+  width: 37px;
   height: 37px;
-  display: grid;
-  place-items: center;
+  display: block;
+  flex-shrink: 0;
+  object-fit: cover;
   box-shadow: 0 3px 7px #2344340c;
-}
-.brand-mark svg {
-  width: 27px;
-  height: 27px;
-  fill: none;
-  stroke: #e4efce;
-  stroke-width: 3.2;
-  stroke-linejoin: round;
-  stroke-linecap: round;
 }
 .workspace-label {
   font-size: 9px;
@@ -1620,7 +1611,7 @@ dialog::backdrop {
     font-size: 25px;
   }
   .sidebar .brand-mark {
-    width: 31px;
+    width: 33px;
     height: 33px;
   }
   .sidebar nav button {

@@ -64,11 +64,13 @@ const icons = { bill: FileText, appointment: CalendarDays, dated_item: Clock3 };
 function Brand() {
   return (
     <div className="brand">
-      <span className="brand-mark" aria-hidden="true">
-        <svg viewBox="0 0 32 32">
-          <path d="M6 24V10a3 3 0 0 1 5-2l5 8 5-8a3 3 0 0 1 5 2v14" />
-        </svg>
-      </span>
+      <img
+        className="brand-mark"
+        src="/icon-192.png"
+        alt=""
+        width={37}
+        height={37}
+      />
       <span>
         mewmo<span className="brand-dot">.</span>
       </span>
@@ -925,7 +927,16 @@ function Workspace({
       </aside>
       <div className="main-shell">
         <header className="topbar">
-          <span className="topbar-name">Mewmo</span>
+          <span className="topbar-name">
+            <img
+              className="brand-mark"
+              src="/icon-192.png"
+              alt=""
+              width={28}
+              height={28}
+            />
+            Mewmo
+          </span>
           <div className="topbar-right">
             <span className="today-label">
               <CalendarDays size={15} />

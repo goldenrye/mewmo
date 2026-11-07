@@ -13,6 +13,40 @@ test.beforeEach(async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Overview" })).toBeVisible();
 });
 
+test("app icon appears in the home header and login branding", async ({
+  page,
+}) => {
+  async function expectAppIcon() {
+    const icon = page.locator("img.brand-mark").filter({ visible: true });
+    await expect(icon).toHaveCount(1);
+    await expect(icon).toHaveAttribute("src", "/icon-192.png");
+    await expect
+      .poll(() =>
+        icon.evaluate(
+          (node: HTMLImageElement) => node.complete && node.naturalWidth > 0,
+        ),
+      )
+      .toBe(true);
+    const box = (await icon.boundingBox())!;
+    expect(box.width).toBe(box.height);
+    await expect(page.locator(".brand svg")).toHaveCount(0);
+  }
+  await expectAppIcon();
+  await page
+    .getByRole("button", { name: "Settings", exact: true })
+    .filter({ visible: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Sign out", exact: true })
+    .filter({ visible: true })
+    .last()
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Welcome to Mewmo" }),
+  ).toBeVisible();
+  await expectAppIcon();
+});
+
 test("Chinese capture requires confirmation and shows Sunday with full date", async ({
   page,
 }) => {

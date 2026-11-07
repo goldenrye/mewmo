@@ -33,7 +33,11 @@ html:lang(zh-CN) body {
   background: white;
   font-size: 1rem;
 }
-.login-form .language-selector {
+.language-selector > span {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.login-form label.language-selector {
   margin: 0 0 24px;
 }
 h1,
@@ -139,8 +143,14 @@ small,
   padding: 0 32px;
 }
 .topbar-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-weight: 650;
   font-size: 1.125rem;
+}
+.topbar-name .brand-mark {
+  display: none;
 }
 .today-label {
   font-size: var(--text-small);
@@ -570,12 +580,25 @@ summary:focus-visible {
   color: var(--muted);
 }
 .login-form {
+  flex: none;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
   padding: 28px 0 0;
   width: 100%;
   max-width: 420px;
+  min-width: 0;
 }
 .login-form form {
   max-width: none;
+  min-width: 0;
+}
+.login-form .secondary {
+  width: 100%;
+  justify-content: center;
+}
+.login-form button svg {
+  flex-shrink: 0;
 }
 .login-form h2 {
   font-size: 1.625rem;
@@ -603,6 +626,12 @@ summary:focus-visible {
   }
   .topbar-right {
     gap: 8px;
+  }
+  .topbar-name .brand-mark {
+    display: block;
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
   }
   .today-label {
     font-size: var(--text-small);

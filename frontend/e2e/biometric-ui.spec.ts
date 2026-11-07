@@ -68,3 +68,73 @@ test("real browser does not offer unsupported Face ID sign-in", async ({
     page.getByRole("button", { name: "Sign in with Face ID" }),
   ).toHaveCount(0);
 });
+
+for (const language of ["en", "zh-CN"]) {
+  test(`${language} login keeps language, Face ID, and fields in one column`, async ({
+    page,
+  }, testInfo) => {
+    await page.addInitScript((value) => {
+      localStorage.setItem("mewmo:language", value);
+    }, language);
+    await mockPrompt(page, true);
+
+    for (const width of [320, 393, 768, 1280]) {
+      await page.setViewportSize({ width, height: 852 });
+      const selector = page.locator(".login-form .language-selector");
+      const form = page.locator(".login-form form");
+      const face = form.locator(".secondary");
+      await expect(face).toBeVisible();
+      const selectorBox = (await selector.boundingBox())!;
+      const formBox = (await form.boundingBox())!;
+      const faceBox = (await face.boundingBox())!;
+      const brandBox = (await page.locator(".login-story").boundingBox())!;
+
+      expect(selectorBox.y).toBeGreaterThanOrEqual(
+        brandBox.y + brandBox.height,
+      );
+      expect(selectorBox.y - brandBox.y - brandBox.height).toBeLessThan(40);
+      expect(selectorBox.y + selectorBox.height).toBeLessThanOrEqual(formBox.y);
+      expect(Math.abs(selectorBox.x - formBox.x)).toBeLessThan(1);
+      expect(Math.abs(selectorBox.width - formBox.width)).toBeLessThan(1);
+      expect(Math.abs(faceBox.width - formBox.width)).toBeLessThan(1);
+      expect(formBox.width).toBeGreaterThanOrEqual(Math.min(width - 48, 420));
+      expect(faceBox.height).toBeLessThanOrEqual(64);
+      expect(
+        await selector
+          .locator("span")
+          .evaluate((node) => getComputedStyle(node).whiteSpace),
+      ).toBe("nowrap");
+      for (const input of await form.locator("input").all()) {
+        const box = (await input.boundingBox())!;
+        expect(Math.abs(box.x - formBox.x)).toBeLessThan(1);
+        expect(Math.abs(box.width - formBox.width)).toBeLessThan(1);
+      }
+      expect(
+        await page.evaluate(() => document.documentElement.scrollWidth),
+      ).toBeLessThanOrEqual(width);
+
+      if (width === 393) {
+        await page.screenshot({
+          path: testInfo.outputPath(`login-${language}.png`),
+          fullPage: true,
+        });
+      }
+    }
+
+    await page.setViewportSize({ width: 320, height: 740 });
+    await page.locator(".auth-toggle").click();
+    await expect(page.locator(".login-form input")).toHaveCount(5);
+    const selectorBox = (await page
+      .locator(".login-form .language-selector")
+      .boundingBox())!;
+    const formBox = (await page.locator(".login-form form").boundingBox())!;
+    expect(selectorBox.y + selectorBox.height).toBeLessThanOrEqual(formBox.y);
+    expect(formBox.width).toBeGreaterThanOrEqual(272);
+    await page.locator(".login-form input").last().fill("long-test-password");
+    await page.locator(".auth-toggle").scrollIntoViewIfNeeded();
+    await expect(page.locator(".auth-toggle")).toBeInViewport();
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth),
+    ).toBeLessThanOrEqual(320);
+  });
+}
