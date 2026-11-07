@@ -25,6 +25,7 @@ const routineNotes = new Set([
   "AI suggested draft fields. Review them carefully; nothing has been saved.",
   "Review every field. OCR can make mistakes. The original file has been discarded.",
   "This AI request included bill images. Your provider may retain them.",
+  "This AI request included document images. Your provider may retain them.",
 ]);
 
 export function Editor({

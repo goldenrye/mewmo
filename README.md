@@ -12,7 +12,7 @@ An invite-only, multi-user bill and reminder app. Each person has a private acco
 
 ## Implemented
 
-- PDF and image import, including scanned PDFs and HEIC photos. Limits: 12 MB, 5 PDF pages, 25 megapixels.
+- PDF and image import for bills, appointments/events, and dated reminder notices, including scanned PDFs and HEIC photos. Limits: 12 MB, 5 PDF pages, 25 megapixels.
 - In-memory drafts with uncertain fields, manual fallback, possible duplicate warnings, and account-number redaction.
 - Chinese/English/mixed text capture, plus an opt-in microphone using iPhone or browser system speech recognition. Keyboard dictation remains available.
 - English and Simplified Chinese interfaces, with automatic device-language detection and a saved language selector.
@@ -29,11 +29,19 @@ Parsing is deliberately conservative, not an open-ended AI assistant. Common rel
 
 **Parsing never creates items or reminders.** Only a separate item request with `confirmed: true` writes an item. Drafts are neither stored in the database nor cached in browser storage.
 
+### Reminder Import
+
+On Home, choose **Import a reminder** to upload a PDF or image containing a bill, appointment/event confirmation, or dated notice such as a renewal, expiry, or return deadline. The importer prepares one draft with the matching item type and default reminder rules. It never creates multiple items automatically.
+
+Local extraction supports English and Chinese labels, event dates/times, and relative dates using the client's local date and IANA timezone. Common sent/printed/birth-date metadata lines are excluded. Missing or conflicting dates/times require review; appointment times are not invented. Dated notices without a time suggest 09:00 and flag it for confirmation. Event prices do not populate bill fields. Titles and inferred item types are flagged for review.
+
+Unrecognized files offer manual entry. Imported items always start open, even when a document says paid/completed or contains instructions. Files are discarded after parsing, and nothing is saved until **Confirm & save**. Optional AI assistance supports all three types, with the same review boundary. Updating the backend enables extraction; rebuild the web/iPhone clients for the new labels and consent descriptions.
+
 ### Local Bill Extraction
 
 By default, bill import uses local OCR and deterministic field matching, with no LLM or external document service. It supports paired column headings such as `Due date / Amount due`, values on nearby lines, and repeated matching totals. Conflicting totals or dates stay blank; a candidate with an unreadable repeated label remains flagged for review.
 
-Payees can come from explicit English/Chinese labels, short company-like headers, or phrases such as `valued Boost Mobile customer`. Inferred payees and titles always show **Check this**. Dollar symbols alone still require currency confirmation. File dates require an explicit year and unambiguous ordering: `NOV 12, 2026` works, while `11/12/2026` requires manual confirmation. Natural-language relative-date parsing is unchanged.
+Payees can come from explicit English/Chinese labels, short company-like headers, or phrases such as `valued Boost Mobile customer`. Inferred payees and titles always show **Check this**. Dollar symbols alone still require currency confirmation. Local bill dates require an explicit year and unambiguous ordering: `NOV 12, 2026` works, while `11/12/2026` requires manual confirmation. Natural-language relative-date parsing is unchanged.
 
 Matching stops at unrelated fields such as bill periods, previous balances, autopay, and card expiry. Scheduled autopay never marks a bill paid. Only the account's last four digits are returned; original files and OCR intermediates remain temporary. This is not a general document-understanding engine: blurry text, unfamiliar layouts, and logos without readable issuer text may still need manual entry.
 
@@ -49,9 +57,9 @@ If the menu appears fixed on OpenAI, check whether server encryption is configur
 
 AI is **off by default**. Enabling it sends new typed input or extracted OCR text to that provider to suggest draft fields. Recognizable account numbers are redacted, but this is best-effort redaction, not anonymization: names, addresses, amounts, or other personal details may remain. Input is limited to the first 12,000 characters. There is no background processing of saved items, chat agent, automatic payment, or AI access to reminder dispatch or other accounts.
 
-**Allow optional image analysis** makes a separate checkbox available on the capture card. Check it for each import that should send bill images to the provider; it resets after the attempt or leaving the page. Images can contain full account details and are not text-redacted. Mewmo strips metadata and converts images or up to five PDF pages to bounded PNGs (2,000-pixel maximum dimension, 8 MB total base64 payload); PDF conversion requires Poppler. Provider retention policies still apply even though Mewmo discards originals and intermediate files. A provider change invalidates pending image consent.
+**Allow optional image analysis** makes a separate checkbox available on the capture card. Check it for each import that should send document images to the provider; it resets after the attempt or leaving the page. Images can contain full account details and other sensitive information and are not text-redacted. Mewmo strips metadata and converts images or up to five PDF pages to bounded PNGs (2,000-pixel maximum dimension, 8 MB total base64 payload); PDF conversion requires Poppler. Provider retention policies still apply even though Mewmo discards originals and intermediate files. A provider change invalidates pending image consent.
 
-AI suggestions can fill missing or uncertain fields; they cannot overwrite confident local values silently. Disagreements are flagged for review. Model output is schema-validated and cannot supply payment status, account IDs, reminder rules, or actions. Imported bills stay open even if the document mentions autopay. Nothing is saved until the existing confirmation step. Timeouts, invalid output, unavailable models, and rate limits fall back to the local draft; if neither local parsing nor AI can extract a bill, manual entry is offered.
+AI suggestions can fill missing or uncertain fields; they cannot overwrite confident local values silently. Field disagreements are flagged for review; a conflicting item type falls back to the local draft with an AI-unavailable warning. Model output is schema-validated and cannot supply payment status, account IDs, reminder rules, or actions. Imported items stay open even if the document mentions autopay or completion. Nothing is saved until the existing confirmation step. Timeouts, invalid output, unavailable models, and rate limits fall back to the local draft; if neither local parsing nor AI can extract a reminder or bill, manual entry is offered.
 
 **Test saved model** sends only a synthetic request, can incur provider charges, and checks text/JSON connectivity, not vision support. Image analysis requires a vision-capable model. Use **Remove model** to delete the encrypted credential and revert to local-only capture. Disabling AI stops subsequent requests; it cannot recall requests already in flight or delete copies held by the provider. Provider usage is billed to the user's account. The app limits assistance to 30 requests and connection tests to 5 requests per user per five minutes, with four simultaneous provider calls per API process, a 30-second network timeout, and bounded responses.
 
@@ -221,11 +229,11 @@ Select your Apple Development Team, choose a unique bundle ID if necessary, and 
 
 The client is bundled locally, not loaded from a remote `server.url`. Native API access requires HTTPS and refuses a relative/plain-HTTP API URL. Native requests use bearer tokens and omit WebView cookies. Tokens remain in memory unless the user explicitly enables biometric sign-in as described below. Notification registration remains on the server independently of session expiry. Explicit sign-out or signing into another account disables the previous account's registrations on that installation; re-enable notifications after signing in. Other devices are unaffected. Use a device's **Disable** button to stop its deliveries remotely.
 
-Camera/photo library descriptions support importing bill photos. A file import never marks anything paid, even if the document contains instructions to do so.
+Camera/photo library descriptions support importing bill and reminder photos. A file import never marks anything paid or completed, even if the document contains instructions to do so.
 
 ### Microphone Input
 
-On Home, choose **Add a reminder by audio** beside **Import a bill**. This clears the reminder box. Select English or Mandarin, read the privacy notice, and tap **Start listening**. Speech appears directly in the main reminder box; there is no separate transcript panel. Recognition stops after 60 seconds or when you tap **Stop listening**, leaving the text editable. Cancelling an active recording discards its text. **Preview draft** uses the same client-local date and IANA time zone as typed capture; **Confirm & save** is still required to create the reminder.
+On Home, choose **Add a reminder by audio** beside **Import a reminder**. This clears the reminder box. Select English or Mandarin, read the privacy notice, and tap **Start listening**. Speech appears directly in the main reminder box; there is no separate transcript panel. Recognition stops after 60 seconds or when you tap **Stop listening**, leaving the text editable. Cancelling an active recording discards its text. **Preview draft** uses the same client-local date and IANA time zone as typed capture; **Confirm & save** is still required to create the reminder.
 
 When AI assistance is enabled, previewing sends the text through the existing per-user model interpretation path. Recording does not call the LLM, upload audio to Mewmo, or save an item. Mewmo does not record audio files or persist transcripts automatically. Apple or the browser's speech provider may process audio online under their policies; this is not an offline-only feature. Recognition accuracy for mixed-language speech varies; select the main spoken language and correct the text before previewing.
 

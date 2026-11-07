@@ -113,7 +113,7 @@ export function AISettings({
     <section className="settings-card account-card ai-settings">
       <h2>{t("AI assistance")}</h2>
       <p className="muted">
-        {t("Use your own model for bill extraction and text capture.")}
+        {t("Use your own model for reminder imports and text capture.")}
       </p>
       {saved && (
         <p>

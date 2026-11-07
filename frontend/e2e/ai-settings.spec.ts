@@ -190,7 +190,7 @@ test("image analysis is opt-in for each import and resets after use", async ({
   });
   await login(page);
   const consent = page.getByLabel(
-    "Send bill images to my AI provider for this import",
+    "Send document images to my AI provider for this import",
   );
   await expect(consent).not.toBeChecked();
   const file = {

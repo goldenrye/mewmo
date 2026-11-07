@@ -25,7 +25,7 @@ from .schemas import Draft, ParseRequest, default_rules, redact_accounts
 
 AI_WARNING = "AI suggested draft fields. Review them carefully; nothing has been saved."
 AI_FAILURE = "AI assistance was unavailable. Review the local draft or enter missing fields manually."
-IMAGE_WARNING = "This AI request included bill images. Your provider may retain them."
+IMAGE_WARNING = "This AI request included document images. Your provider may retain them."
 
 
 class Suggestion(BaseModel):
@@ -47,10 +47,15 @@ Return only one JSON object with these optional fields:
 is_bill (boolean), kind (bill/appointment/dated_item), title, payee,
 amount (decimal string), currency (three-letter ISO code), due_date (YYYY-MM-DD), due_time (HH:MM).
 Use null for missing or uncertain information. Do not invent a payee, currency, date, or time.
-For files, extract only a bill. Identify the issuer, not the customer or payment-card brand.
+For files, identify one actionable bill, appointment/event, or dated reminder/notice.
+Return kind for recognizable reminders; for unrelated content return is_bill=false and kind=null.
+For bills set is_bill=true. Identify the issuer, not the customer or payment-card brand.
 Use amount due, not previous charges or credits; use due date, not billing period or card expiry.
+For appointments use the event date/time, not message timestamps or birth dates.
+For dated notices use the deadline/expiry date. Prices on event notices do not make them bills.
+If multiple events or conflicting dates are present, leave ambiguous fields null for review.
 Autopay and payment instructions do not prove payment. Never return status, rules, IDs, or account numbers.
-For typed reminders, interpret Chinese, English, and mixed text using the supplied local_date and timezone.
+Interpret Chinese, English, and mixed text using the supplied local_date and timezone.
 Keep titles in the input language. No markdown, commentary, or other fields."""
 
 
@@ -149,18 +154,27 @@ def assist_draft(
         raw = request_model(preference.provider, preference.model, key, SYSTEM, prompt, images)
         suggestion = Suggestion.model_validate_json(raw)
         file_source = draft is None or draft.source == "file"
-        if file_source and suggestion.is_bill is not True:
-            raise ModelUnavailable()
+        if file_source:
+            kind = suggestion.kind or ("bill" if suggestion.is_bill is True else None)
+            if (
+                kind is None
+                or (kind == "bill" and suggestion.is_bill is False)
+                or (kind != "bill" and suggestion.is_bill is True)
+                or (kind != "bill" and not (suggestion.due_date or (suggestion.title or "").strip()))
+                or (draft is not None and draft.kind != kind)
+            ):
+                raise ModelUnavailable()
         if draft is None:
             draft = Draft(
                 local_date=context.local_date,
                 timezone=context.timezone,
-                kind="bill",
+                kind=kind,
                 source="file",
-                title="Imported bill",
-                due_time="09:00",
-                rules=default_rules("bill"),
-                uncertain=["title", "payee", "amount", "currency", "due_date"],
+                title="Imported bill" if kind == "bill" else "Imported reminder",
+                due_time=None if kind == "appointment" else "09:00",
+                rules=default_rules(kind),
+                uncertain=["title", "kind", "due_date", "due_time"]
+                + (["payee", "amount", "currency"] if kind == "bill" else []),
                 warnings=[IMAGE_WARNING] if images else [],
             )
         if not file_source and draft.kind == "dated_item" and suggestion.kind:
@@ -169,6 +183,8 @@ def assist_draft(
                 draft.rules = default_rules(draft.kind)
                 draft.uncertain.append("kind")
         for field in ("title", "payee", "amount", "currency", "due_date", "due_time"):
+            if file_source and draft.kind != "bill" and field in ("payee", "amount", "currency"):
+                continue
             value = getattr(suggestion, field)
             if value is None:
                 continue
@@ -182,7 +198,7 @@ def assist_draft(
             if existing != value or field in draft.uncertain:
                 draft.uncertain.append(field)
         if file_source:
-            draft.kind, draft.status = "bill", "open"
+            draft.status = "open"
         draft.uncertain = list(dict.fromkeys(draft.uncertain))
         draft.warnings.append(AI_WARNING)
         return draft

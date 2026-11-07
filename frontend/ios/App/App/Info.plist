@@ -27,9 +27,9 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
         <key>NSCameraUsageDescription</key>
-        <string>Take a photo of a bill to prepare a draft. The original is discarded after parsing.</string>
+        <string>Take a photo of a bill or reminder notice to prepare a draft. The original is discarded after parsing.</string>
         <key>NSPhotoLibraryUsageDescription</key>
-        <string>Choose a bill image to prepare a draft.</string>
+        <string>Choose a bill or reminder image to prepare a draft.</string>
         <key>NSFaceIDUsageDescription</key>
         <string>Use Face ID to securely sign in to your Mewmo account on this iPhone.</string>
         <key>NSMicrophoneUsageDescription</key>

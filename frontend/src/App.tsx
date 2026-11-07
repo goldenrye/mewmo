@@ -1096,9 +1096,12 @@ function Workspace({
                     onClick={() => file.current?.click()}
                   >
                     <Upload size={15} />
-                    {t("Import a bill")}
+                    {t("Import a reminder")}
                   </button>
                 </VoiceInput>
+                <p className="small muted">
+                  {t("PDF or image: bills, appointments, and dated notices.")}
+                </p>
                 {modelSettings?.enabled && (
                   <p className="small muted">
                     {t(
@@ -1118,7 +1121,7 @@ function Workspace({
                       />
                       <span>
                         {t(
-                          "Send bill images to my AI provider for this import",
+                          "Send document images to my AI provider for this import",
                         )}
                       </span>
                     </label>

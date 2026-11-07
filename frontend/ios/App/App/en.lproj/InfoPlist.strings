@@ -1,5 +1,5 @@
-"NSCameraUsageDescription" = "Take a photo of a bill to prepare a draft. The original is discarded after parsing.";
-"NSPhotoLibraryUsageDescription" = "Choose a bill image to prepare a draft.";
+"NSCameraUsageDescription" = "Take a photo of a bill or reminder notice to prepare a draft. The original is discarded after parsing.";
+"NSPhotoLibraryUsageDescription" = "Choose a bill or reminder image to prepare a draft.";
 "NSFaceIDUsageDescription" = "Use Face ID to securely sign in to your Mewmo account on this iPhone.";
 "NSMicrophoneUsageDescription" = "Speak a reminder and review the transcript before saving. Mewmo does not store recordings.";
 "NSSpeechRecognitionUsageDescription" = "Turn spoken reminders into text. Apple may process audio online. You review the text before preparing a draft.";

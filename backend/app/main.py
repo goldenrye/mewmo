@@ -19,9 +19,10 @@ from .ai_assistance import assist_draft
 from .auth import client_key_hash, require_user
 from .config import settings
 from .database import session
+from .file_reminders import parse_file
 from .model_settings import router as model_settings_router
 from .models import Delivery, Device, Item, ModelPreference, Reminder, User, now
-from .parsing import ParseFailure, extract_file, parse_bill, parse_text
+from .parsing import ParseFailure, extract_file, parse_text
 from .push import valid_web_endpoint
 from .reminders import reconcile
 from .schemas import Draft, ItemInput, ParseRequest, StateInput, default_rules
@@ -191,7 +192,7 @@ async def file_draft(
         extracted, draft, failure = "", None, None
         try:
             extracted = await run_in_threadpool(extract_file, bytes(data))
-            draft = parse_bill(extracted, context)
+            draft = parse_file(extracted, context)
         except ParseFailure as error:
             failure = error
         data.clear()

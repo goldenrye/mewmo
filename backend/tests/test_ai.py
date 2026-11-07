@@ -309,6 +309,71 @@ def test_not_a_bill_image_cannot_become_a_saved_item(client, db):
     assert db.scalar(select(func.count()).select_from(Item)) == 0
 
 
+@pytest.mark.parametrize("kind", ["appointment", "dated_item"])
+@pytest.mark.parametrize("local", [True, False])
+def test_ai_reminder_import_is_draft_only_without_bill_fields(client, db, kind, local):
+    save(client)
+    source = "Meeting\nDate: unreadable" if kind == "appointment" else "Renewal reminder"
+    suggestion = json.dumps(
+        {
+            "is_bill": False,
+            "kind": kind,
+            "title": "Review document",
+            "due_date": "2026-11-12",
+            "due_time": "14:30",
+            "amount": "40",
+            "currency": "USD",
+            "payee": "Not a bill",
+        }
+    )
+    with (
+        patch("app.main.extract_file", return_value=source if local else "Unrecognized layout"),
+        patch("app.ai_assistance.request_model", return_value=suggestion),
+    ):
+        response = client.post(FILE_URL, content=b"file")
+    assert response.status_code == 200, response.text
+    draft = response.json()
+    assert draft["kind"] == kind and draft["status"] == "open"
+    assert draft["due_date"] == "2026-11-12" and draft["due_time"] == "14:30"
+    assert draft["amount"] is None and draft["currency"] is None and draft["payee"] is None
+    assert {"due_date", "due_time"} <= set(draft["uncertain"])
+    assert db.scalar(select(func.count()).select_from(Item)) == 0
+    assert db.scalar(select(func.count()).select_from(Reminder)) == 0
+
+
+@pytest.mark.parametrize(
+    "output",
+    [
+        {"is_bill": True, "kind": "appointment", "title": "Meeting"},
+        {"is_bill": False, "kind": "bill"},
+        {"is_bill": False},
+        {"kind": "dated_item"},
+        {"kind": "appointment", "title": "Meeting", "status": "completed"},
+    ],
+)
+def test_invalid_file_classification_keeps_local_reminder(client, output):
+    save(client)
+    with (
+        patch("app.main.extract_file", return_value="Meeting\nDate: 2026-11-08\nTime: 9am"),
+        patch("app.ai_assistance.request_model", return_value=json.dumps(output)),
+    ):
+        draft = client.post(FILE_URL, content=b"file").json()
+    assert draft["kind"] == "appointment" and draft["status"] == "open"
+    assert draft["due_date"] == "2026-11-08"
+    assert AI_FAILURE in draft["warnings"]
+
+
+def test_ai_classification_disagreement_keeps_local_kind_and_rules(client):
+    save(client)
+    with (
+        patch("app.main.extract_file", return_value="Meeting\nDate: 2026-11-08\nTime: 9am"),
+        patch("app.ai_assistance.request_model", return_value=SUGGESTION),
+    ):
+        draft = client.post(FILE_URL, content=b"file").json()
+    assert draft["kind"] == "appointment" and len(draft["rules"]) == 2
+    assert draft["amount"] is None and AI_FAILURE in draft["warnings"]
+
+
 def test_changed_image_provider_requires_new_consent(client):
     save(client, allow_images=True, provider="gemini")
     with patch("app.ai_assistance.request_model") as call:

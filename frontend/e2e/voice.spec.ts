@@ -227,7 +227,7 @@ test("navigation stops recognition and narrow controls remain usable", async ({
   const audioButton = page.getByRole("button", {
     name: "Add a reminder by audio",
   });
-  const importButton = page.getByRole("button", { name: "Import a bill" });
+  const importButton = page.getByRole("button", { name: "Import a reminder" });
   expect(
     await audioButton.evaluate((node) => getComputedStyle(node).fontSize),
   ).toBe(
