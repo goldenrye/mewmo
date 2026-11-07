@@ -16,11 +16,18 @@ import {
   LogOut,
   Plus,
   Search,
+  ScanFace,
   Settings2,
   Upload,
   X,
 } from "lucide-react";
-import { api, setToken } from "./api";
+import { api, currentSession, setToken } from "./api";
+import {
+  biometricStatus,
+  clearBiometrics,
+  signInWithBiometrics,
+  type BiometricStatus,
+} from "./biometrics";
 import { Editor } from "./Editor";
 import { AccountSettings } from "./AccountSettings";
 import {
@@ -75,8 +82,35 @@ function Login({
   const [confirmation, setConfirmation] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [biometric, setBiometric] = useState<BiometricStatus | null>(null);
+  useEffect(() => {
+    let live = true;
+    void biometricStatus()
+      .then((value) => {
+        if (live) setBiometric(value);
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, []);
+  async function biometricLogin() {
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      onLogin(await signInWithBiometrics());
+    } catch (error) {
+      setError((error as Error).message);
+      setBiometric(await biometricStatus().catch(() => null));
+    } finally {
+      setBusy(false);
+    }
+  }
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (busy) return;
+    const version = currentSession().version;
     setBusy(true);
     setError("");
     try {
@@ -100,6 +134,10 @@ function Login({
           }),
         },
       );
+      // Password/account switching never inherits another account's saved session.
+      await clearBiometrics();
+      if (currentSession().version !== version)
+        throw new Error("Account changed. Please try again.");
       onLogin(result);
     } catch (e) {
       setError((e as Error).message);
@@ -120,6 +158,17 @@ function Login({
           </h2>
           {register && (
             <p className="muted">An invitation is required to join.</p>
+          )}
+          {!register && biometric?.enabled && (
+            <button
+              type="button"
+              className="secondary"
+              disabled={busy}
+              onClick={() => void biometricLogin()}
+            >
+              <ScanFace size={20} />
+              Sign in with {biometric.label}
+            </button>
           )}
           {register && (
             <>
@@ -432,12 +481,17 @@ export default function App() {
   const clearAccount = useCallback(() => {
     setToken(null);
     setAccount(null);
+    void clearBiometrics().catch(() => {});
     void clearDisplayedNotifications();
   }, []);
   useEffect(() => {
     let live = true;
     if (initialInvitation) {
       window.history.replaceState({}, "", location.pathname + location.search);
+      setAccount(null);
+      void clearBiometrics().catch(() => {});
+    } else if (Capacitor.isNativePlatform()) {
+      // A cold native launch must use a password or unlock Keychain, never a cookie.
       setAccount(null);
     } else {
       void api<Account>("/auth/me")
@@ -499,6 +553,7 @@ export default function App() {
       key={account.user.id}
       account={account}
       onSignOut={async () => {
+        await clearBiometrics();
         await api("/auth/logout", { method: "POST" });
         clearAccount();
         notifyOtherTabs();

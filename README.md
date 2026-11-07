@@ -169,9 +169,25 @@ npm run ios:open
 
 Select your Apple Development Team, choose a unique bundle ID if necessary, and ensure that APNs is enabled for that ID and signing profile. Match `APNS_TOPIC` on the server. Run on a physical iPhone or archive for TestFlight.
 
-The client is bundled locally, not loaded from a remote `server.url`. Native API access requires HTTPS and refuses a relative/plain-HTTP API URL. Native session tokens are kept only in memory, so a cold app launch requires sign-in again. Notification registration remains on the server independently of session expiry. Explicit sign-out or signing into another account disables the previous account's registrations on that installation; re-enable notifications after signing in. Other devices are unaffected. Use a device's **Disable** button to stop its deliveries remotely.
+The client is bundled locally, not loaded from a remote `server.url`. Native API access requires HTTPS and refuses a relative/plain-HTTP API URL. Native requests use bearer tokens and omit WebView cookies. Tokens remain in memory unless the user explicitly enables biometric sign-in as described below. Notification registration remains on the server independently of session expiry. Explicit sign-out or signing into another account disables the previous account's registrations on that installation; re-enable notifications after signing in. Other devices are unaffected. Use a device's **Disable** button to stop its deliveries remotely.
 
 Camera/photo library descriptions support importing bill photos. Dictation remains entirely owned by the iOS keyboard. A file import never marks anything paid, even if the document contains instructions to do so.
+
+### Face ID Sign-In
+
+1. Rebuild and install the updated native iPhone app. Enable Face ID and a device passcode in iPhone Settings.
+2. Sign in with your username and password, then open **Settings → Your account → Face ID sign-in → Enable Face ID**.
+3. After a cold app launch, tap **Sign in with Face ID**. Password sign-in is always available. Touch ID is supported on devices that use it instead.
+
+This is native iPhone sign-in, not browser face recognition or a passkey implementation. It does not automatically lock an already-open app when it goes into the background. Mewmo never reads face images or biometric templates, and never saves the account password. A single session per API address is saved in the app's Keychain, protected by `biometryCurrentSet` and `WhenPasscodeSetThisDeviceOnly`: it cannot sync to another device, requires biometrics to read, and is invalidated when biometric enrollment changes. Capacitor bridge logging is disabled to avoid logging session tokens.
+
+The server still validates the session after every unlock. Sessions expire **seven days after password sign-in**, not seven days after enabling Face ID. Expiry/revocation requires password sign-in and enabling Face ID again. Signing out, switching accounts by password, or disabling the feature removes the saved session. Cancelling a scan or losing network connectivity does not bypass authentication; a network failure retains the protected session for retry.
+
+Physical-device release checks:
+- Enable, force-quit/relaunch, unlock successfully, and cancel a scan.
+- Deny Face ID permission, test biometric lockout, and confirm password fallback.
+- Disable the feature, sign out, and switch accounts; verify the prior saved account cannot return.
+- Re-enroll Face ID and test an expired/revoked server session; both must require password sign-in.
 
 ## Reminder Semantics
 

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Copy, Link } from "lucide-react";
 import { api } from "./api";
+import { BiometricSettings } from "./BiometricSettings";
 import type { Account, Invitation } from "./types";
 
 export function AccountSettings({ account }: { account: Account }) {
@@ -44,6 +45,7 @@ export function AccountSettings({ account }: { account: Account }) {
         <p className="muted">
           {account.user.display_name} · @{account.user.username}
         </p>
+        <BiometricSettings />
         <details className="disclosure">
           <summary>Change password</summary>
           <form onSubmit={changePassword}>
