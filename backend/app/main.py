@@ -5,7 +5,9 @@ from datetime import date
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, Response
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
@@ -38,6 +40,29 @@ app.add_middleware(
     ],
 )
 ocr_slots = threading.BoundedSemaphore(2)
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error(request: Request, error: RequestValidationError):
+    errors = error.errors()
+    if request.url.path == "/api/auth/login" and any(
+        e["type"] == "missing" and tuple(e["loc"]) == ("body", "username") for e in errors
+    ):
+        return JSONResponse(
+            status_code=422,
+            content={
+                "detail": (
+                    "Username is required. If your sign-in screen only asks for a password, "
+                    "update the Mewmo iPhone app or reload the website, then sign in "
+                    "with your username and password."
+                )
+            },
+        )
+    # Pydantic's input/context fields can contain passwords or invitation tokens.
+    return JSONResponse(
+        status_code=422,
+        content={"detail": [{key: e[key] for key in ("type", "loc", "msg")} for e in errors]},
+    )
 
 
 @app.middleware("http")

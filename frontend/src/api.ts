@@ -66,7 +66,14 @@ export async function api<T>(
       .json()
       .catch(() => ({ detail: `Request failed (${response.status})` }));
     const detail = Array.isArray(body.detail)
-      ? body.detail.map((e: { msg: string }) => e.msg).join(". ")
+      ? body.detail
+          .map((e: { msg: string; loc?: (string | number)[] }) => {
+            const field = e.loc
+              ?.filter((part) => !["body", "query", "path", "header"].includes(String(part)))
+              .join(".");
+            return field ? `${field}: ${e.msg}` : e.msg;
+          })
+          .join(". ")
       : body.detail;
     if (version !== sessionVersion)
       throw new Error("Account changed. Request discarded.");

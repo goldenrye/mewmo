@@ -3,7 +3,7 @@ from unittest.mock import patch
 import pytest
 from sqlalchemy import select
 
-from app.models import Item, Reminder
+from app.models import AuthSession, Item, Reminder
 from app.push import valid_web_endpoint
 
 
@@ -11,6 +11,49 @@ def test_auth_required(client):
     client.cookies.clear()
     assert client.get("/api/items").status_code == 401
     assert client.post("/api/auth/login", json={"username": "admin", "password": "wrong"}).status_code == 401
+
+
+def test_old_iphone_login_explains_update_without_defaulting_to_admin(client, db):
+    client.cookies.clear()
+    sessions_before = len(db.scalars(select(AuthSession)).all())
+    response = client.post(
+        "/api/auth/login",
+        headers={"Origin": "capacitor://localhost"},
+        json={"password": "test-only-password"},
+    )
+    assert response.status_code == 422
+    assert "Username is required" in response.json()["detail"]
+    assert "update the Mewmo iPhone app" in response.json()["detail"]
+    assert "test-only-password" not in response.text
+    assert "set-cookie" not in response.headers
+    assert len(db.scalars(select(AuthSession)).all()) == sessions_before
+
+
+def test_validation_errors_name_fields_without_echoing_credentials(client):
+    response = client.post(
+        "/api/auth/register",
+        json={"username": "alice", "password": "secret"},
+    )
+    assert response.status_code == 422
+    errors = response.json()["detail"]
+    assert any(e["loc"] == ["body", "invite_token"] for e in errors)
+    assert "secret" not in response.text
+    assert all(set(e) == {"type", "loc", "msg"} for e in errors)
+
+
+def test_updated_iphone_login_returns_working_session(client):
+    client.cookies.clear()
+    response = client.post(
+        "/api/auth/login",
+        headers={"Origin": "capacitor://localhost"},
+        json={"username": "admin", "password": "test-only-password"},
+    )
+    assert response.status_code == 200
+    assert response.json()["user"]["username"] == "admin"
+    token = response.json()["token"]
+    assert token
+    client.cookies.clear()
+    assert client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"}).status_code == 200
 
 
 def test_csrf_origin_rejected(client):
