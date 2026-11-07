@@ -12,6 +12,15 @@ import dateparser
 from PIL import Image, ImageOps
 from pillow_heif import register_heif_opener
 
+from .bill_fields import (
+    DATE,
+    DUE_LABEL,
+    TOTAL_LABEL,
+    account_from_lines,
+    dates_in_row,
+    labelled_values,
+    payee_from_lines,
+)
 from .schemas import Draft, ParseRequest, default_rules, redact_accounts
 
 register_heif_opener()
@@ -235,7 +244,17 @@ def ocr_image(path: Path) -> str:
                 normalized = ImageOps.exif_transpose(image).convert("RGB")
                 normalized.thumbnail((3200, 3200))
                 normalized.save(path.with_suffix(".png"))
-        return run_tool(["tesseract", str(path.with_suffix(".png")), "stdout", "-l", "eng+chi_sim"])
+        return run_tool(
+            [
+                "tesseract",
+                str(path.with_suffix(".png")),
+                "stdout",
+                "-l",
+                "eng+chi_sim",
+                "-c",
+                "preserve_interword_spaces=1",
+            ]
+        )
     except (OSError, Image.DecompressionBombError, Image.DecompressionBombWarning):
         raise ParseFailure("This image cannot be read. Please use JPEG, PNG, HEIC, or WebP.")
 
@@ -277,39 +296,73 @@ def parse_bill(text: str, request: ParseRequest) -> Draft:
         rules=default_rules("bill"),
         due_time="09:00",
     )
-    # Only narrowly labelled fields are extracted. Document prose is never an instruction.
-    payee = re.search(r"^(?:payee|biller|vendor|收款人|收款方|商户)\s*[:：]\s*(.{1,180})$", text, re.I | re.M)
+    lines = [line.strip() for line in text.replace("\r", "\n").splitlines() if line.strip()]
+    payee, inferred = payee_from_lines(lines)
     if payee:
-        draft.payee = draft.title = redact_accounts(payee[1].strip())
+        draft.payee = draft.title = redact_accounts(payee)
+        if inferred:
+            draft.uncertain += ["payee", "title"]
     else:
         draft.title = "Imported bill"
         draft.uncertain += ["payee", "title"]
-    total_lines = re.findall(
-        r"(?:total due|amount due|balance due|应付金额|应付|合计)[^\n]{0,100}", text, re.I
+
+    def amounts_in_row(row):
+        # Otherwise a year followed by a currency in the next column looks like money.
+        row = DATE.sub("", row)
+        values = []
+        for match in MONEY.finditer(row):
+            symbol = (match["prefix"] or match["suffix"]).upper()
+            number = match["a"] or match["b"]
+            amount = Decimal(number.replace(",", ""))
+            before, after = row[: match.start()].rstrip(), row[match.end() :]
+            if (
+                before.endswith(("-", "−", "("))
+                or after.startswith((")", ".", ","))
+                or (after and after[0].isdigit())
+                or not re.fullmatch(r"(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?", number)
+                or amount > Decimal("999999999999.99")
+            ):
+                values.append((None, None, True))
+            else:
+                values.append(
+                    (
+                        amount,
+                        CURRENCIES.get(symbol, symbol),
+                        symbol in ("$", "刀", "¥", "元", "DOLLAR", "DOLLARS"),
+                    )
+                )
+        return values
+
+    amounts, unresolved = labelled_values(
+        lines,
+        TOTAL_LABEL,
+        amounts_in_row,
+        DUE_LABEL,
+        DATE,
+        MONEY,
     )
-    matches = [MONEY.search(line) for line in total_lines]
-    amounts = [m for m in matches if m]
-    if len(amounts) == 1:
-        m = amounts[0]
-        draft.amount = Decimal((m["a"] or m["b"]).replace(",", ""))
-        symbol = (m["prefix"] or m["suffix"]).upper()
-        draft.currency = CURRENCIES.get(symbol, symbol)
-        if symbol in ("$", "刀", "¥", "元"):
+    unique_amounts = {(amount, currency) for amount, currency, _ in amounts}
+    if len(unique_amounts) == 1 and amounts[0][0] is not None:
+        draft.amount, draft.currency = next(iter(unique_amounts))
+        if unresolved:
+            draft.uncertain.append("amount")
+        if unresolved or all(ambiguous for _, _, ambiguous in amounts):
             draft.uncertain.append("currency")
     else:
         draft.uncertain += ["amount", "currency"]
-    due = re.search(
-        r"(?:due date|payment due|pay by|到期日|截止日期|缴费截止)\s*[:：]?\s*([^\n]{1,80})", text, re.I
+
+    dates, unresolved = labelled_values(
+        lines,
+        DUE_LABEL,
+        dates_in_row,
+        TOTAL_LABEL,
+        MONEY,
+        DATE,
     )
-    if due:
-        draft.due_date, _, _, _ = extract_date(due[1], request)
-    if not draft.due_date:
+    if len(set(dates)) == 1:
+        draft.due_date = dates[0]
+    if not draft.due_date or unresolved:
         draft.uncertain.append("due_date")
-    account = re.search(
-        r"(?:account(?: number| no\.?)?|账号|账户)\s*[:：#]?\s*([*\d][*\d -]{3,40})", text, re.I
-    )
-    if account:
-        digits = re.sub(r"\D", "", account[1])
-        draft.account_last4 = digits[-4:] if len(digits) >= 4 else None
+    draft.account_last4 = account_from_lines(lines)
     draft.warnings.append("Review every field. OCR can make mistakes. The original file has been discarded.")
     return draft

@@ -156,6 +156,7 @@ def test_heic_photo_decodes_before_ocr(tmp_path):
     def ocr(args):
         normalized = Path(args[1])
         observed.append(normalized)
+        assert args[-2:] == ["-c", "preserve_interword_spaces=1"]
         with Image.open(normalized) as image:
             assert image.mode == "RGB"
         return "INVOICE\nAmount due: USD 120"

@@ -28,6 +28,16 @@ Parsing is deliberately conservative, not an open-ended AI assistant. Common rel
 
 **Parsing never creates items or reminders.** Only a separate item request with `confirmed: true` writes an item. Drafts are neither stored in the database nor cached in browser storage.
 
+### Local Bill Extraction
+
+Bill import uses local OCR and deterministic field matching, with no LLM or external document service. It supports paired column headings such as `Due date / Amount due`, values on nearby lines, and repeated matching totals. Conflicting totals or dates stay blank; a candidate with an unreadable repeated label remains flagged for review.
+
+Payees can come from explicit English/Chinese labels, short company-like headers, or phrases such as `valued Boost Mobile customer`. Inferred payees and titles always show **Check this**. Dollar symbols alone still require currency confirmation. File dates require an explicit year and unambiguous ordering: `NOV 12, 2026` works, while `11/12/2026` requires manual confirmation. Natural-language relative-date parsing is unchanged.
+
+Matching stops at unrelated fields such as bill periods, previous balances, autopay, and card expiry. Scheduled autopay never marks a bill paid. Only the account's last four digits are returned; original files and OCR intermediates remain temporary. This is not a general document-understanding engine: blurry text, unfamiliar layouts, and logos without readable issuer text may still need manual entry.
+
+Regression coverage includes a synthetic Boost-style OCR transcript yielding **Boost Mobile / 61.78 / November 12, 2026**, with the inferred payee and currency flagged. Generated two-column PNG/PDF/HEIF tests require Tesseract and Poppler; transcript tests do not prove extraction from a particular original image. This is a backend change: deploying the updated API enables it for both browser and iPhone imports without rebuilding the iPhone app.
+
 ## Language
 
 Choose **Language → 简体中文** on the sign-in screen or under **Settings → Your account**. The default follows the device/browser language; Chinese language variants use Simplified Chinese, and unsupported languages fall back to English. The preference is saved per browser/iPhone installation, not to an account, and updates other open browser tabs.
