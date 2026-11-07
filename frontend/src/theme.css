@@ -1,0 +1,289 @@
+/* Shared palette for web and iPhone, inspired by the existing peach/cream icon. */
+:root {
+  color-scheme: light;
+  --canvas: #faf7f2;
+  --surface: #fffdf9;
+  --ink: #292e31;
+  --muted: #69645f;
+  --line: #ded6cd;
+  --control-line: #92877e;
+  --teal: #216863;
+  --teal-hover: #19544f;
+  --teal-soft: #e8f2ef;
+  --peach: #fae3d3;
+  --peach-strong: #975334;
+  --neutral: #f1ece5;
+  --success: #256846;
+  --success-soft: #e9f3ed;
+  --warning: #855613;
+  --warning-soft: #fff3db;
+  --danger: #a33835;
+  --danger-soft: #fff0ed;
+  /* Compatibility aliases for existing component styles. */
+  --green: var(--teal);
+  --mint: var(--peach);
+  color: var(--ink);
+  background: var(--canvas);
+  accent-color: var(--teal);
+}
+body,
+.login-page,
+.topbar {
+  background: var(--canvas);
+  color: var(--ink);
+}
+.sidebar,
+.settings-card,
+.full-calendar,
+.editor-dialog {
+  background: var(--surface);
+  color: var(--ink);
+}
+.brand,
+.topbar-name,
+.empty-state h3,
+.account-card label,
+.editor-dialog label,
+.login-form label {
+  color: var(--ink);
+}
+.brand-dot {
+  color: var(--peach-strong);
+}
+.brand-mark {
+  box-shadow: 0 2px 8px #6a453014;
+}
+.primary,
+.parse-button {
+  background: var(--teal);
+  color: white;
+  box-shadow: 0 2px 4px #292e310d;
+}
+.primary:hover,
+.parse-button:hover {
+  background: var(--teal-hover);
+}
+.secondary,
+.complete-button {
+  background: var(--surface);
+  border-color: var(--control-line);
+  color: var(--teal);
+}
+.secondary:hover,
+.complete-button:hover {
+  background: var(--teal-soft);
+  color: var(--teal-hover);
+}
+.icon-button:hover,
+.sidebar nav button:hover,
+.sidebar-bottom > button:hover {
+  background: var(--neutral);
+}
+.sidebar nav button.active,
+.sidebar-bottom > button.active,
+.mobile-nav button.active {
+  background: var(--peach);
+  color: var(--ink);
+  border-radius: 8px;
+}
+.sidebar nav button small,
+.count,
+.profile > span,
+.avatar {
+  background: var(--neutral);
+  color: var(--muted);
+  border-color: var(--line);
+}
+.sidebar nav button.active small {
+  background: var(--surface);
+  color: var(--ink);
+}
+.profile .icon-button,
+.notification-button,
+.calendar-arrows,
+.optional,
+.empty-inline,
+.loading-page p,
+.detail-amount span,
+.dialog-footer > span {
+  color: var(--muted);
+}
+.notification-button i {
+  background: var(--peach-strong);
+  border-color: var(--canvas);
+}
+.capture-card {
+  background: var(--surface);
+  border-color: var(--line);
+}
+.capture-card.dragging {
+  outline-color: var(--teal);
+  background: var(--teal-soft);
+}
+.capture-input,
+.search-box,
+.account-card input,
+.editor-dialog input:not([type="checkbox"]),
+.editor-dialog select,
+.login-form input,
+.language-selector select,
+.ai-settings select {
+  border-color: var(--control-line);
+  background: white;
+  color: var(--ink);
+}
+.capture-input textarea,
+.search-box input {
+  color: var(--ink);
+}
+.capture-input textarea::placeholder,
+.search-box input::placeholder,
+.editor-dialog input::placeholder,
+.account-card input::placeholder,
+.login-form input::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+summary:focus-visible,
+.search-box:focus-within {
+  outline-color: var(--teal);
+}
+.capture-input:focus-within {
+  border-color: var(--teal);
+  box-shadow: 0 0 0 2px var(--teal);
+}
+.tabs button.active {
+  color: var(--ink);
+  border-bottom-color: var(--peach-strong);
+}
+.type-icon,
+.type-icon.appointment,
+.empty-symbol,
+.date-preview {
+  background: var(--teal-soft);
+  color: var(--teal);
+}
+.type-icon.bill {
+  background: var(--peach);
+  color: var(--peach-strong);
+}
+.type-icon.dated_item {
+  background: #f1ebf6;
+  color: #705180;
+}
+.date-preview strong {
+  color: var(--ink);
+}
+.checkbox-label input {
+  accent-color: var(--teal);
+}
+.segmented {
+  background: var(--neutral);
+}
+.segmented button.active {
+  background: var(--peach);
+  color: var(--ink);
+  box-shadow: 0 1px 3px #292e3114;
+}
+.full-calendar .calendar-grid button {
+  color: var(--ink);
+}
+.full-calendar .calendar-grid button.outside {
+  color: var(--muted);
+}
+.full-calendar .calendar-grid button:hover {
+  background: var(--neutral);
+  color: var(--ink);
+}
+.full-calendar .calendar-grid button.today {
+  background: var(--teal);
+  color: white;
+}
+.full-calendar .calendar-grid button.chosen {
+  background: var(--peach);
+  color: var(--ink);
+  outline-color: var(--peach-strong);
+}
+.calendar-grid button i,
+.calendar-legend > i {
+  background: var(--teal);
+}
+.calendar-grid button.today i {
+  background: white;
+}
+.calendar-grid button.chosen i {
+  background: var(--teal);
+}
+.status-pill,
+.status-pill.cancelled {
+  background: var(--neutral);
+  color: var(--muted);
+}
+.status-pill.sent {
+  background: var(--success-soft);
+  color: var(--success);
+}
+.notice,
+.review-flag,
+.import-error {
+  background: var(--warning-soft);
+  color: var(--warning);
+  border-color: #dec69e;
+}
+.error,
+.status-pill.failed {
+  background: var(--danger-soft);
+  color: var(--danger);
+  border-color: #e4b9b3;
+}
+.group-label.late,
+.item-text .late-text,
+.delivery-error,
+.delete-section p,
+.danger {
+  color: var(--danger);
+}
+.danger-button {
+  background: var(--danger);
+  color: white;
+}
+.toast {
+  background: var(--teal-hover);
+  border-color: var(--teal);
+  box-shadow: 0 10px 40px #292e3126;
+}
+.toast > svg,
+.toast > button:not(.icon-button) {
+  color: var(--peach);
+}
+.spinner.dark {
+  border-color: var(--line);
+  border-top-color: var(--teal);
+}
+dialog {
+  border-color: var(--line);
+  color: var(--ink);
+}
+dialog::backdrop {
+  background: #292e3166;
+}
+.editor-dialog {
+  box-shadow: 0 25px 90px #292e312b;
+}
+@media (max-width: 700px) {
+  .topbar {
+    background: #faf7f2f5;
+  }
+  .mobile-nav {
+    background: #fffdf9f5;
+    border-color: var(--line);
+  }
+  .mobile-nav button.active svg {
+    fill: none;
+    stroke: currentColor;
+  }
+}
