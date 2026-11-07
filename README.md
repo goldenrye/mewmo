@@ -16,7 +16,7 @@ An invite-only, multi-user bill and reminder app. Each person has a private acco
 - In-memory drafts with uncertain fields, manual fallback, possible duplicate warnings, and account-number redaction.
 - Chinese/English/mixed text capture. iPhone voice input uses the system keyboard's dictation; no microphone control or permission.
 - English and Simplified Chinese interfaces, with automatic device-language detection and a saved language selector.
-- Optional per-user OpenAI, Anthropic, or Gemini model settings, encrypted API keys, connection testing, and per-import image consent.
+- Optional per-user OpenAI, Claude, Gemini, or Doubao model settings, encrypted API keys, connection testing, and per-import image consent.
 - Full date, weekday, time, and IANA zone on every confirmation card.
 - Manual create/edit/delete, overdue-first home, search, calendar, one-tap paid/completed, undo, and history.
 - Editable reminder rules; each fire time has a database row and per-device delivery audit.
@@ -41,7 +41,11 @@ Regression coverage includes a synthetic Boost-style OCR transcript yielding **B
 
 ## Optional AI Assistance
 
-Open **Settings > AI assistance > Configure model**. Each user can save one provider, model ID, and API key. Supported APIs are OpenAI Chat Completions with JSON output, Anthropic Messages, and Google Gemini `generateContent`. Use a model available to your provider account; custom endpoints and local model servers are not supported. Keys are encrypted on the Mewmo server, never returned by the API, and never stored in browser storage. Leaving the key blank preserves it; changing providers requires a new key and fresh consent in the UI.
+Open **Settings > AI assistance > Configure model**. Each user can save one provider, model ID, and API key. The provider menu lists **OpenAI (GPT)**, **Claude (Anthropic)**, **Gemini (Google)**, and **Doubao (Volcengine Ark)**. Supported APIs are OpenAI Chat Completions with JSON output, Anthropic Messages, Google Gemini `generateContent`, and Volcengine Ark Chat Completions. Use a model available to your provider account; custom URLs and local model servers are not supported. Keys are encrypted on the Mewmo server, never returned by the API, and never stored in browser storage. Leaving the key blank preserves it; changing providers requires a new key and fresh consent in the UI.
+
+For **Doubao**, use a public Volcengine Ark API key and a Beijing-region Model ID or Endpoint ID (`ep-...`). Requests go only to `https://ark.cn-beijing.volces.com/api/v3/chat/completions`, using JSON output and disabled thinking for bounded extraction. Select a model supporting these options, and vision input if needed. This is not the Doubao consumer app or an internal ByteDance model endpoint. See the [official Ark Chat API reference](https://www.volcengine.com/docs/82379/1494384).
+
+If the menu appears fixed on OpenAI, check whether server encryption is configured and whether the installed client is current. The provider selector now remains browsable before encryption setup, while entering keys, enabling AI, saving, and testing remain disabled. Claude was previously labeled only "Anthropic". Adding Doubao requires updating the backend as well as the web/iPhone client; no additional database migration beyond `0003` is required.
 
 AI is **off by default**. Enabling it sends new typed input or extracted OCR text to that provider to suggest draft fields. Recognizable account numbers are redacted, but this is best-effort redaction, not anonymization: names, addresses, amounts, or other personal details may remain. Input is limited to the first 12,000 characters. There is no background processing of saved items, chat agent, automatic payment, or AI access to reminder dispatch or other accounts.
 

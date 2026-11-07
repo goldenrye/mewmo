@@ -329,5 +329,7 @@
   "Enable image analysis in AI settings before using it for an import.": "请先在 AI 设置中允许图片分析，再为此次导入启用。",
   "AI-assisted capture is on. New input is sent to your selected provider.": "AI 辅助已开启，新的输入会发送给你选择的服务商。",
   "Send bill images to my AI provider for this import": "此次导入将账单图片发送给我的 AI 服务商",
-  "AI settings changed. Review them and opt in to image analysis again.": "AI 设置已更改，请核对后重新同意图片分析。"
+  "AI settings changed. Review them and opt in to image analysis again.": "AI 设置已更改，请核对后重新同意图片分析。",
+  "Doubao (Volcengine Ark)": "豆包（火山方舟）",
+  "Use your Volcengine Ark API key and a Model ID or Endpoint ID (ep-...) from the Beijing region. Image analysis requires a vision-capable model.": "请使用火山方舟 API 密钥，以及北京地域的模型 ID 或接入点 ID（ep-...）。图片分析需要支持视觉的模型。"
 }

@@ -47,6 +47,7 @@ export function AISettings({
 
   async function save(event: React.FormEvent) {
     event.preventDefault();
+    if (busy || !saved?.available) return;
     setBusy(true);
     setError("");
     setMessage("");
@@ -143,7 +144,7 @@ export function AISettings({
               setRemove(false);
             }}
           >
-            <fieldset disabled={busy || !saved.available}>
+            <fieldset disabled={busy}>
               <label>
                 {t("Provider")}
                 <select
@@ -159,9 +160,10 @@ export function AISettings({
                     setImages(false);
                   }}
                 >
-                  <option value="openai">OpenAI</option>
-                  <option value="anthropic">Anthropic</option>
-                  <option value="gemini">Google Gemini</option>
+                  <option value="openai">OpenAI (GPT)</option>
+                  <option value="anthropic">Claude (Anthropic)</option>
+                  <option value="gemini">Gemini (Google)</option>
+                  <option value="doubao">{t("Doubao (Volcengine Ark)")}</option>
                 </select>
               </label>
               <label>
@@ -178,13 +180,16 @@ export function AISettings({
               </label>
               <p className="muted">
                 {t(
-                  "Use a model ID supported by your provider. Image analysis requires a vision-capable model.",
+                  provider === "doubao"
+                    ? "Use your Volcengine Ark API key and a Model ID or Endpoint ID (ep-...) from the Beijing region. Image analysis requires a vision-capable model."
+                    : "Use a model ID supported by your provider. Image analysis requires a vision-capable model.",
                 )}
               </p>
               <label>
                 {t("API key")}
                 <input
                   type="password"
+                  disabled={!saved.available}
                   autoComplete="off"
                   maxLength={2048}
                   required={!saved.has_key || provider !== saved.provider}
@@ -205,6 +210,7 @@ export function AISettings({
               <label className="ai-toggle">
                 <input
                   type="checkbox"
+                  disabled={!saved.available}
                   checked={enabled}
                   onChange={(event) => setEnabled(event.target.checked)}
                 />
@@ -218,6 +224,7 @@ export function AISettings({
               <label className="ai-toggle">
                 <input
                   type="checkbox"
+                  disabled={!saved.available}
                   checked={images}
                   onChange={(event) => setImages(event.target.checked)}
                 />
@@ -229,13 +236,13 @@ export function AISettings({
                 )}
               </p>
               <div className="ai-actions">
-                <button className="primary" disabled={busy}>
+                <button className="primary" disabled={busy || !saved.available}>
                   {t("Save AI settings")}
                 </button>
                 <button
                   className="secondary"
                   type="button"
-                  disabled={busy || dirty || !saved.has_key}
+                  disabled={busy || !saved.available || dirty || !saved.has_key}
                   onClick={() => void test()}
                 >
                   {t("Test saved model")}

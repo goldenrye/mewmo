@@ -14,8 +14,12 @@ class ModelUnavailable(ValueError):
 
 def request_model(provider: str, model: str, key: str, system: str, prompt: str, images=()) -> str:
     text = {"type": "text", "text": prompt}
-    if provider == "openai":
-        url = "https://api.openai.com/v1/chat/completions"
+    if provider in ("openai", "doubao"):
+        url = (
+            "https://api.openai.com/v1/chat/completions"
+            if provider == "openai"
+            else "https://ark.cn-beijing.volces.com/api/v3/chat/completions"
+        )
         headers = {"Authorization": f"Bearer {key}"}
         content = [
             text,
@@ -27,10 +31,13 @@ def request_model(provider: str, model: str, key: str, system: str, prompt: str,
         body = {
             "model": model,
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": content}],
-            "max_completion_tokens": 1600,
             "response_format": {"type": "json_object"},
-            "store": False,
         }
+        if provider == "openai":
+            body.update(max_completion_tokens=1600, store=False)
+        else:
+            # Ark uses its own output budget and reasoning controls, not OpenAI's store option.
+            body.update(max_tokens=1600, thinking={"type": "disabled"})
     elif provider == "anthropic":
         url = "https://api.anthropic.com/v1/messages"
         headers = {"x-api-key": key, "anthropic-version": "2023-06-01"}
@@ -81,7 +88,7 @@ def request_model(provider: str, model: str, key: str, system: str, prompt: str,
                     if len(data) > 65536:
                         raise ModelUnavailable()
         result = json.loads(data)
-        if provider == "openai":
+        if provider in ("openai", "doubao"):
             choice = result["choices"][0]
             if choice.get("finish_reason") != "stop" or choice["message"].get("tool_calls"):
                 raise ModelUnavailable()

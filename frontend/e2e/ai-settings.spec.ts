@@ -224,8 +224,51 @@ test("missing server encryption explains why saving is disabled", async ({
   await expect(
     panel.getByRole("button", { name: "Save AI settings" }),
   ).toBeDisabled();
+  const provider = panel.getByLabel("Provider", { exact: true });
+  await expect(provider).toBeEnabled();
+  await expect(provider.locator("option")).toHaveText([
+    "OpenAI (GPT)",
+    "Claude (Anthropic)",
+    "Gemini (Google)",
+    "Doubao (Volcengine Ark)",
+  ]);
+  await provider.selectOption("doubao");
+  await expect(
+    panel.getByText(/Use your Volcengine Ark API key/),
+  ).toBeVisible();
+  await expect(panel.getByLabel("API key", { exact: true })).toBeDisabled();
   await navigate(page, "Overview");
   await expect(page.getByLabel("Natural language input")).toBeEnabled();
+});
+
+test("Doubao can be configured in Chinese with its own key and endpoint ID", async ({
+  page,
+}) => {
+  const writes = await mockSettings(page);
+  await login(page);
+  const panel = await openSettings(page);
+  await page.getByLabel("Language").selectOption("zh-CN");
+  await panel
+    .getByRole("combobox", { name: "模型服务商", exact: true })
+    .selectOption("doubao");
+  await expect(
+    panel.getByRole("option", { name: "豆包（火山方舟）" }),
+  ).toHaveCount(1);
+  await expect(panel.getByText(/请使用火山方舟 API 密钥/)).toBeVisible();
+  await panel.getByLabel("模型 ID").fill("ep-20261107000000-example");
+  await panel.getByLabel("API 密钥", { exact: true }).fill(secret);
+  await panel.getByLabel("开启 AI 辅助").check();
+  await panel.getByRole("button", { name: "保存 AI 设置" }).click();
+  await expect(panel.getByText("AI 设置已保存。")).toBeVisible();
+  expect(writes[0]).toMatchObject({
+    provider: "doubao",
+    model: "ep-20261107000000-example",
+    api_key: secret,
+    enabled: true,
+  });
+  await expect(panel.getByLabel("API 密钥", { exact: true })).toHaveValue("");
+  await panel.getByRole("button", { name: "测试已保存的模型" }).click();
+  await expect(panel.getByText("连接成功。")).toBeVisible();
 });
 
 test("real settings API persists for a member without making a provider call", async ({

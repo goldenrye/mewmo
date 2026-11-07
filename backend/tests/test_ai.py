@@ -119,9 +119,10 @@ def test_rejects_custom_endpoints_path_injection_and_secret_echo(client, changes
     assert "injected-header" not in response.text
 
 
-def test_changing_provider_requires_new_key(client):
+@pytest.mark.parametrize("provider", ["anthropic", "gemini", "doubao"])
+def test_changing_provider_requires_new_key(client, provider):
     save(client)
-    response = client.put("/api/model-settings", json=MODEL | {"provider": "gemini", "api_key": None})
+    response = client.put("/api/model-settings", json=MODEL | {"provider": provider, "api_key": None})
     assert response.status_code == 400
     assert client.get("/api/model-settings").json()["provider"] == "openai"
 
@@ -134,6 +135,17 @@ def test_missing_encryption_fails_closed_but_allows_removal(client, monkeypatch)
     assert response.status_code == 503
     assert KEY not in response.text
     assert client.delete("/api/model-settings").status_code == 204
+
+
+def test_doubao_endpoint_id_can_be_saved_and_tested_privately(client, db):
+    endpoint = "ep-20261107000000-example"
+    value = save(client, provider="doubao", model=endpoint)
+    assert value["provider"] == "doubao" and value["model"] == endpoint
+    assert KEY not in json.dumps(value)
+    assert decrypt_key(db.scalar(select(ModelPreference))) == KEY
+    with patch("app.model_settings.request_model", return_value='{"ok":true}') as call:
+        assert client.post("/api/model-settings/test").json() == {"ok": True}
+    assert call.call_args.args[:3] == ("doubao", endpoint, KEY)
 
 
 def test_test_connection_uses_synthetic_input_and_sanitizes_errors(client):
@@ -162,8 +174,9 @@ def test_default_local_only_never_calls_provider(client):
     assert response.json()["due_date"] == "2026-11-08"
 
 
-def test_ai_file_suggestions_stay_draft_and_redact_accounts(client, db):
-    save(client)
+@pytest.mark.parametrize("provider", ["openai", "anthropic", "gemini", "doubao"])
+def test_ai_file_suggestions_stay_draft_and_redact_accounts(client, db, provider):
+    save(client, provider=provider)
     source = "BILL\nAccount: 1234 5678 9999\nAmount due: $61.78\nDue date\nunreadable"
     with (
         patch("app.main.extract_file", return_value=source),
@@ -181,6 +194,7 @@ def test_ai_file_suggestions_stay_draft_and_redact_accounts(client, db):
     assert {"payee", "due_date"} <= set(draft["uncertain"])
     assert "1234" not in call.call_args.args[4]
     assert call.call_args.args[5] == ()
+    assert call.call_args.args[0] == provider
     assert db.scalar(select(func.count()).select_from(Item)) == 0
     assert db.scalar(select(func.count()).select_from(Reminder)) == 0
 
@@ -399,6 +413,11 @@ def test_redaction_preserves_dates_and_amounts_but_not_account_numbers():
             {"choices": [{"finish_reason": "stop", "message": {"content": '{"ok":true}'}}]},
         ),
         (
+            "doubao",
+            "ark.cn-beijing.volces.com",
+            {"choices": [{"finish_reason": "stop", "message": {"content": '{"ok":true}'}}]},
+        ),
+        (
             "anthropic",
             "api.anthropic.com",
             {"stop_reason": "end_turn", "content": [{"type": "text", "text": '{"ok":true}'}]},
@@ -431,6 +450,14 @@ def test_provider_requests_use_fixed_hosts_no_tools_or_query_keys(provider, host
     assert KEY not in str(request.url) and KEY not in request.content.decode()
     assert "tools" not in request.content.decode()
     assert "aW1hZ2U=" in request.content.decode()
+    if provider == "doubao":
+        body = json.loads(request.content)
+        assert request.url.path == "/api/v3/chat/completions"
+        assert request.headers["Authorization"] == f"Bearer {KEY}"
+        assert body["max_tokens"] == 1600
+        assert body["thinking"] == {"type": "disabled"}
+        assert body["response_format"] == {"type": "json_object"}
+        assert "max_completion_tokens" not in body and "store" not in body
 
 
 @pytest.mark.parametrize(
@@ -460,6 +487,7 @@ def test_provider_rejects_redirects_errors_and_oversized_responses(status, conte
     "provider,result",
     [
         ("openai", {"choices": [None]}),
+        ("doubao", {"choices": [None]}),
         ("anthropic", []),
         ("gemini", {"candidates": ["not an object"]}),
     ],

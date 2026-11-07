@@ -60,7 +60,7 @@ export type Account = { user: User; vapid_public_key: string };
 export type AuthResult = Account & { token: string | null };
 export type ModelSettings = {
   available: boolean;
-  provider: "openai" | "anthropic" | "gemini";
+  provider: "openai" | "anthropic" | "gemini" | "doubao";
   model: string;
   has_key: boolean;
   enabled: boolean;

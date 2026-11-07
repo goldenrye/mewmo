@@ -22,7 +22,7 @@ TEST_ERROR = "Could not connect to the model. Check the provider, model ID, API 
 
 class ModelSettingsInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    provider: Literal["openai", "anthropic", "gemini"]
+    provider: Literal["openai", "anthropic", "gemini", "doubao"]
     model: str = Field(min_length=1, max_length=120, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]*$")
     api_key: SecretStr | None = Field(default=None, min_length=1, max_length=2048)
     enabled: bool = False
