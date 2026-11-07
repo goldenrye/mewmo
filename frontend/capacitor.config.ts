@@ -4,7 +4,7 @@ const config: CapacitorConfig = {
   appId: "com.jpi.mewmo",
   appName: "Mewmo",
   webDir: "dist",
-  backgroundColor: "#faf7f2",
+  backgroundColor: "#f8f6f2",
   // Keychain bridge calls carry session tokens, including during development.
   loggingBehavior: "none",
   ios: { contentInset: "never" },

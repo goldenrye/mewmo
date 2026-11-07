@@ -3,8 +3,8 @@
   "short_name": "Mewmo",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#faf7f2",
-  "theme_color": "#faf7f2",
+  "background_color": "#f8f6f2",
+  "theme_color": "#f8f6f2",
   "icons": [
     {
       "src": "/icon-192.png",

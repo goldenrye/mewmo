@@ -1,16 +1,16 @@
-/* Shared palette for web and iPhone, inspired by the existing peach/cream icon. */
+/* Shared warm-neutral and lilac palette for web and iPhone. */
 :root {
   color-scheme: light;
-  --canvas: #faf7f2;
-  --surface: #fffdf9;
-  --ink: #292e31;
+  --canvas: #f8f6f2;
+  --surface: #fffdfa;
+  --ink: #2e2d2b;
   --muted: #69645f;
-  --line: #ded6cd;
+  --line: #e6dfd7;
   --control-line: #92877e;
-  --teal: #216863;
-  --teal-hover: #19544f;
-  --teal-soft: #e8f2ef;
-  --peach: #fae3d3;
+  --accent: #8466a6;
+  --accent-hover: #73558f;
+  --accent-soft: #f0eaf5;
+  --peach: #f6ddd2;
   --peach-strong: #975334;
   --neutral: #f1ece5;
   --success: #256846;
@@ -20,11 +20,11 @@
   --danger: #a33835;
   --danger-soft: #fff0ed;
   /* Compatibility aliases for existing component styles. */
-  --green: var(--teal);
+  --green: var(--accent-hover);
   --mint: var(--peach);
   color: var(--ink);
   background: var(--canvas);
-  accent-color: var(--teal);
+  accent-color: var(--accent);
 }
 body,
 .login-page,
@@ -55,24 +55,24 @@ body,
 }
 .primary,
 .parse-button {
-  background: var(--teal);
+  background: var(--accent);
   color: white;
   box-shadow: 0 2px 4px #292e310d;
 }
 .primary:hover,
 .parse-button:hover {
-  background: var(--teal-hover);
+  background: var(--accent-hover);
 }
 .secondary,
 .complete-button {
   background: var(--surface);
   border-color: var(--control-line);
-  color: var(--teal);
+  color: var(--accent-hover);
 }
 .secondary:hover,
 .complete-button:hover {
-  background: var(--teal-soft);
-  color: var(--teal-hover);
+  background: var(--accent-soft);
+  color: var(--accent-hover);
 }
 .icon-button:hover,
 .sidebar nav button:hover,
@@ -117,8 +117,8 @@ body,
   border-color: var(--line);
 }
 .capture-card.dragging {
-  outline-color: var(--teal);
-  background: var(--teal-soft);
+  outline-color: var(--accent);
+  background: var(--accent-soft);
 }
 .capture-input,
 .search-box,
@@ -150,11 +150,11 @@ textarea:focus-visible,
 select:focus-visible,
 summary:focus-visible,
 .search-box:focus-within {
-  outline-color: var(--teal);
+  outline-color: var(--accent);
 }
 .capture-input:focus-within {
-  border-color: var(--teal);
-  box-shadow: 0 0 0 2px var(--teal);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent);
 }
 .tabs button.active {
   color: var(--ink);
@@ -164,8 +164,8 @@ summary:focus-visible,
 .type-icon.appointment,
 .empty-symbol,
 .date-preview {
-  background: var(--teal-soft);
-  color: var(--teal);
+  background: var(--accent-soft);
+  color: var(--accent-hover);
 }
 .type-icon.bill {
   background: var(--peach);
@@ -179,7 +179,7 @@ summary:focus-visible,
   color: var(--ink);
 }
 .checkbox-label input {
-  accent-color: var(--teal);
+  accent-color: var(--accent);
 }
 .segmented {
   background: var(--neutral);
@@ -200,23 +200,23 @@ summary:focus-visible,
   color: var(--ink);
 }
 .full-calendar .calendar-grid button.today {
-  background: var(--teal);
+  background: var(--accent);
   color: white;
 }
 .full-calendar .calendar-grid button.chosen {
-  background: var(--peach);
-  color: var(--ink);
-  outline-color: var(--peach-strong);
+  background: var(--accent);
+  color: white;
+  outline-color: var(--accent-hover);
 }
 .calendar-grid button i,
 .calendar-legend > i {
-  background: var(--teal);
+  background: var(--accent);
 }
 .calendar-grid button.today i {
   background: white;
 }
 .calendar-grid button.chosen i {
-  background: var(--teal);
+  background: white;
 }
 .status-pill,
 .status-pill.cancelled {
@@ -252,8 +252,8 @@ summary:focus-visible,
   color: white;
 }
 .toast {
-  background: var(--teal-hover);
-  border-color: var(--teal);
+  background: var(--accent-hover);
+  border-color: var(--accent);
   box-shadow: 0 10px 40px #292e3126;
 }
 .toast > svg,
@@ -262,7 +262,7 @@ summary:focus-visible,
 }
 .spinner.dark {
   border-color: var(--line);
-  border-top-color: var(--teal);
+  border-top-color: var(--accent);
 }
 dialog {
   border-color: var(--line);
@@ -274,12 +274,26 @@ dialog::backdrop {
 .editor-dialog {
   box-shadow: 0 25px 90px #292e312b;
 }
+.full-calendar {
+  border-radius: 20px;
+}
+.item-row {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--accent);
+  border-radius: 14px;
+  padding: 0 12px;
+  margin-top: 12px;
+}
+.item-amount {
+  color: var(--accent-hover);
+}
 @media (max-width: 700px) {
   .topbar {
-    background: #faf7f2f5;
+    background: var(--canvas);
   }
   .mobile-nav {
-    background: #fffdf9f5;
+    background: var(--canvas);
     border-color: var(--line);
   }
   .mobile-nav button.active svg {
