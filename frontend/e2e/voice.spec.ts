@@ -91,19 +91,18 @@ test("Chinese speech becomes an editable reminder and saves only after confirmat
   await page.clock.setFixedTime(new Date("2026-11-06T12:00:00"));
   await setup(page, "zh-CN");
   const before = await page.request.get("/api/items").then((r) => r.json());
-  await page.getByRole("button", { name: "说出提醒" }).click();
+  await page.getByRole("button", { name: "通过语音添加提醒" }).click();
   expect((await stats(page)).starts).toBe(0);
-  await expect(
-    page.getByText(/设备或浏览器的语音服务可能在线处理音频/),
-  ).toBeVisible();
+  await expect(page.getByText(/系统语音服务可能在线处理音频/)).toBeVisible();
   await page.getByRole("button", { name: "开始聆听" }).click();
   expect((await stats(page)).language).toBe("zh-CN");
   await say(page, "后天9点");
   await say(page, "后天9点有医生预约");
-  await expect(page.getByLabel("识别文字")).toHaveValue("后天9点有医生预约");
+  await expect(page.getByLabel("用自然语言添加事项")).toHaveValue(
+    "后天9点有医生预约",
+  );
   await expect(page.getByRole("button", { name: "预览草稿" })).toBeDisabled();
   await page.getByRole("button", { name: "停止聆听" }).click();
-  await page.getByRole("button", { name: "使用识别文字" }).click();
   await expect(page.getByLabel("用自然语言添加事项")).toHaveValue(
     "后天9点有医生预约",
   );
@@ -135,12 +134,13 @@ test("Chinese speech becomes an editable reminder and saves only after confirmat
   }
 });
 
-test("permission denial and cancellation preserve typed input", async ({
+test("opening audio clears typed input and cancellation discards speech", async ({
   page,
 }) => {
   await setup(page);
   await page.getByLabel("Natural language input").fill("Keep my original text");
-  await page.getByRole("button", { name: "Speak a reminder" }).click();
+  await page.getByRole("button", { name: "Add a reminder by audio" }).click();
+  await expect(page.getByLabel("Natural language input")).toHaveValue("");
   await page.getByRole("button", { name: "Start listening" }).click();
   await page.evaluate(() =>
     (window as unknown as { speechTest: SpeechTest }).speechTest.fail(),
@@ -149,9 +149,7 @@ test("permission denial and cancellation preserve typed input", async ({
   await page.getByRole("button", { name: "Start listening" }).click();
   await say(page, "This will be cancelled");
   await page.getByRole("button", { name: "Cancel voice input" }).click();
-  await expect(page.getByLabel("Natural language input")).toHaveValue(
-    "Keep my original text",
-  );
+  await expect(page.getByLabel("Natural language input")).toHaveValue("");
   await expect(page.getByLabel("Natural language input")).toBeEditable();
   expect((await stats(page)).aborts).toBe(2);
 });
@@ -186,15 +184,16 @@ test("AI interpretation uses the existing text endpoint only after explicit prev
       },
     });
   });
-  await page.getByRole("button", { name: "Speak a reminder" }).click();
-  await expect(page.getByText(/Your transcript will be sent/)).toBeVisible();
+  await page.getByRole("button", { name: "Add a reminder by audio" }).click();
+  await expect(
+    page.getByText("AI helps interpret your text when you preview."),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Start listening" }).click();
   await say(page, "Dentist tomorrow at nine");
   await page.getByRole("button", { name: "Stop listening" }).click();
   await page
-    .getByLabel("Transcript", { exact: true })
+    .getByLabel("Natural language input", { exact: true })
     .fill("Dentist tomorrow at 9am");
-  await page.getByRole("button", { name: "Use transcript" }).click();
   expect(bodies).toHaveLength(0);
   await page.getByRole("button", { name: "Preview draft" }).click();
   await expect(page.getByRole("dialog")).toContainText(
@@ -218,9 +217,25 @@ test("navigation stops recognition and narrow controls remain usable", async ({
 }) => {
   await setup(page);
   await page.setViewportSize({ width: 320, height: 740 });
-  await page.getByRole("button", { name: "Speak a reminder" }).click();
+  await page.getByRole("button", { name: "Add a reminder by audio" }).click();
   await page.getByRole("button", { name: "Start listening" }).click();
   await say(page, "Unsaved private speech");
+  const box = await page.getByLabel("Natural language input").boundingBox();
+  expect(box!.y).toBeGreaterThanOrEqual(56);
+  expect(box!.y + box!.height).toBeLessThan(600);
+  await expect(page.locator(".voice-panel textarea")).toHaveCount(0);
+  const audioButton = page.getByRole("button", {
+    name: "Add a reminder by audio",
+  });
+  const importButton = page.getByRole("button", { name: "Import a bill" });
+  expect(
+    await audioButton.evaluate((node) => getComputedStyle(node).fontSize),
+  ).toBe(
+    await importButton.evaluate((node) => getComputedStyle(node).fontSize),
+  );
+  expect((await audioButton.boundingBox())!.height).toBe(
+    (await importButton.boundingBox())!.height,
+  );
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= innerWidth,
@@ -242,7 +257,7 @@ test("unsupported browsers keep manual capture available without prompting", asy
       webkitSpeechRecognition: undefined,
     }),
   );
-  await page.getByRole("button", { name: "Speak a reminder" }).click();
+  await page.getByRole("button", { name: "Add a reminder by audio" }).click();
   await expect(
     page.getByText(/Speech recognition is unavailable here/),
   ).toBeVisible();

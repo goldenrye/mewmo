@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Mic, Square } from "lucide-react";
 import { getLocale, t } from "./i18n";
 import { startSpeech, supportsSpeech, type SpeechSession } from "./speech";
@@ -6,33 +6,38 @@ import { startSpeech, supportsSpeech, type SpeechSession } from "./speech";
 export function VoiceInput({
   disabled,
   aiEnabled,
-  onUse,
+  onText,
+  onReset,
   onBusy,
+  children,
 }: {
   disabled: boolean;
   aiEnabled: boolean;
-  onUse: (text: string) => boolean;
+  onText: (text: string) => void;
+  onReset: () => void;
   onBusy: (busy: boolean) => void;
+  children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const [language, setLanguage] = useState(getLocale());
   const [state, setState] = useState<
     "idle" | "starting" | "listening" | "stopping"
   >("idle");
-  const [transcript, setTranscript] = useState("");
   const [error, setError] = useState("");
   const session = useRef<SpeechSession | null>(null);
   const generation = useRef(0);
   const busyCallback = useRef(onBusy);
+  const textCallback = useRef(onText);
   busyCallback.current = onBusy;
+  textCallback.current = onText;
   const active = state !== "idle";
 
-  function cancel() {
+  function cancel(discard = session.current !== null) {
     generation.current++;
     session.current?.cancel();
     session.current = null;
     setState("idle");
-    setTranscript("");
+    if (discard) textCallback.current("");
     setError("");
     setOpen(false);
     busyCallback.current(false);
@@ -45,14 +50,16 @@ export function VoiceInput({
       if (event.key === "Escape") cancel();
     }
     document.addEventListener("visibilitychange", hidden);
-    window.addEventListener("pagehide", cancel);
+    const leave = () => cancel();
+    window.addEventListener("pagehide", leave);
     window.addEventListener("keydown", escape);
     return () => {
       generation.current++;
+      if (session.current) textCallback.current("");
       session.current?.cancel();
       busyCallback.current(false);
       document.removeEventListener("visibilitychange", hidden);
-      window.removeEventListener("pagehide", cancel);
+      window.removeEventListener("pagehide", leave);
       window.removeEventListener("keydown", escape);
     };
   }, []);
@@ -64,7 +71,7 @@ export function VoiceInput({
     if (disabled || session.current) return;
     const id = ++generation.current;
     setError("");
-    setTranscript("");
+    onReset();
     setState("starting");
     onBusy(true);
     session.current = startSpeech(language, {
@@ -72,20 +79,21 @@ export function VoiceInput({
         if (id === generation.current) setState("listening");
       },
       partial(value) {
-        if (id === generation.current) setTranscript(value);
+        if (id === generation.current) textCallback.current(value);
       },
       done(value) {
         if (id !== generation.current) return;
         session.current = null;
-        setTranscript(value);
+        textCallback.current(value);
         setState("idle");
+        setOpen(false);
         onBusy(false);
       },
       error(message) {
         if (id !== generation.current) return;
         session.current = null;
         setError(message);
-        setTranscript("");
+        textCallback.current("");
         setState("idle");
         onBusy(false);
       },
@@ -93,18 +101,27 @@ export function VoiceInput({
   }
   return (
     <div className="voice-input">
-      <button
-        type="button"
-        className="voice-trigger"
-        disabled={disabled || active}
-        aria-expanded={open}
-        onClick={() => {
-          setLanguage(getLocale());
-          setOpen(!open);
-        }}
-      >
-        <Mic size={18} /> {t("Speak a reminder")}
-      </button>
+      <div className="capture-footer capture-actions">
+        {children}
+        <button
+          type="button"
+          className="voice-trigger"
+          disabled={disabled || active}
+          aria-expanded={open}
+          onClick={() => {
+            if (open) {
+              cancel();
+              return;
+            }
+            onReset();
+            setError("");
+            setLanguage(getLocale());
+            setOpen(true);
+          }}
+        >
+          <Mic size={15} /> {t("Add a reminder by audio")}
+        </button>
+      </div>
       {open && (
         <section className="voice-panel" aria-label={t("Voice input")}>
           {!supportsSpeech() ? (
@@ -115,96 +132,80 @@ export function VoiceInput({
             </p>
           ) : (
             <>
-              <p className="muted">
-                {t(
-                  "Your device or browser speech service may process audio online. Mewmo does not store recordings. Review the transcript before previewing a draft.",
-                )}
-              </p>
-              {aiEnabled && (
-                <p className="muted">
+              {!active && (
+                <p className="muted voice-privacy">
                   {t(
-                    "AI assistance is on. Your transcript will be sent to your selected model only when you preview the draft.",
+                    "System speech may process audio online. Mewmo does not store recordings.",
                   )}
                 </p>
               )}
-              <label>
-                {t("Speech language")}
-                <select
-                  aria-label={t("Speech language")}
-                  value={language}
-                  disabled={active}
-                  onChange={(event) =>
-                    setLanguage(event.target.value as "en-US" | "zh-CN")
-                  }
-                >
-                  <option value="en-US">English</option>
-                  <option value="zh-CN">中文（普通话）</option>
-                </select>
-              </label>
-              {active && (
-                <p role="status">
-                  {t(
-                    state === "starting"
-                      ? "Starting microphone..."
-                      : state === "stopping"
-                        ? "Finishing transcript..."
-                        : "Listening... Speak for up to 60 seconds.",
-                  )}
+              {!active && aiEnabled && (
+                <p className="muted voice-privacy">
+                  {t("AI helps interpret your text when you preview.")}
                 </p>
               )}
-              {(active || transcript) && (
-                <label>
-                  {t("Transcript")}
-                  <textarea
-                    aria-label={t("Transcript")}
-                    rows={3}
-                    value={transcript}
-                    readOnly={active}
-                    maxLength={4000}
-                    onChange={(event) => setTranscript(event.target.value)}
-                  />
-                </label>
-              )}
-              {error && (
-                <p className="error" role="alert">
-                  {t(error)}
-                </p>
-              )}
-              <div className="voice-actions">
+              <div className="voice-controls">
                 {!active && (
-                  <button type="button" className="secondary" onClick={start}>
-                    {t(transcript ? "Record again" : "Start listening")}
-                  </button>
+                  <label>
+                    {t("Speech language")}
+                    <select
+                      aria-label={t("Speech language")}
+                      value={language}
+                      disabled={active}
+                      onChange={(event) =>
+                        setLanguage(event.target.value as "en-US" | "zh-CN")
+                      }
+                    >
+                      <option value="en-US">English</option>
+                      <option value="zh-CN">中文（普通话）</option>
+                    </select>
+                  </label>
                 )}
                 {active && (
-                  <button
-                    type="button"
-                    className="secondary"
-                    disabled={state === "stopping"}
-                    onClick={() => {
-                      setState("stopping");
-                      session.current?.stop();
-                    }}
-                  >
-                    <Square size={16} />
-                    {t("Stop listening")}
-                  </button>
+                  <p role="status">
+                    {t(
+                      state === "starting"
+                        ? "Starting microphone..."
+                        : state === "stopping"
+                          ? "Finishing transcript..."
+                          : "Listening... Speak for up to 60 seconds.",
+                    )}
+                  </p>
                 )}
-                {!active && transcript.trim() && (
-                  <button
-                    type="button"
-                    className="primary"
-                    onClick={() => {
-                      if (onUse(transcript.trim())) cancel();
-                    }}
-                  >
-                    {t("Use transcript")}
-                  </button>
+                {error && (
+                  <p className="error" role="alert">
+                    {t(error)}
+                  </p>
                 )}
+                <div className="voice-actions">
+                  {!active && (
+                    <button type="button" className="secondary" onClick={start}>
+                      {t("Start listening")}
+                    </button>
+                  )}
+                  {active && (
+                    <button
+                      type="button"
+                      className="secondary"
+                      disabled={state === "stopping"}
+                      onClick={() => {
+                        setState("stopping");
+                        session.current?.stop();
+                      }}
+                    >
+                      <Square size={16} />
+                      {t("Stop listening")}
+                    </button>
+                  )}
+                </div>
               </div>
             </>
           )}
-          <button type="button" className="text-button" onClick={cancel}>
+          <button
+            type="button"
+            className="text-button voice-cancel"
+            onClick={() => cancel(true)}
+          >
             {t("Cancel voice input")}
           </button>
         </section>

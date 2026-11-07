@@ -21,6 +21,12 @@ import {
   type Rule,
 } from "./types";
 
+const routineNotes = new Set([
+  "AI suggested draft fields. Review them carefully; nothing has been saved.",
+  "Review every field. OCR can make mistakes. The original file has been discarded.",
+  "This AI request included bill images. Your provider may retain them.",
+]);
+
 export function Editor({
   draft,
   itemId,
@@ -37,6 +43,12 @@ export function Editor({
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [duplicateAccepted, setDuplicateAccepted] = useState(false);
+  const notes = [...new Set(value.warnings)].filter((warning) =>
+    routineNotes.has(warning),
+  );
+  const warnings = [...new Set(value.warnings)].filter(
+    (warning) => !routineNotes.has(warning),
+  );
   useEffect(() => {
     dialog.current?.showModal();
   }, []);
@@ -54,7 +66,7 @@ export function Editor({
     );
   }
   const label = (key: string, text: string) => (
-    <span>
+    <span className="field-label">
       {text}
       {value.uncertain.includes(key) && (
         <small className="review-flag">{t("Check this")}</small>
@@ -125,7 +137,10 @@ export function Editor({
         {!itemId && (
           <p className="muted">{t("Nothing is saved until you confirm.")}</p>
         )}
-        {value.warnings.map((w, i) => (
+        {notes.some((note) => note.startsWith("AI suggested")) && (
+          <p className="draft-source">{t("AI-assisted draft")}</p>
+        )}
+        {warnings.map((w, i) => (
           <div className="notice" key={i}>
             <AlertCircle size={17} />
             <span>{messageText(w)}</span>
@@ -211,7 +226,7 @@ export function Editor({
             </datalist>
           </>
         )}
-        <div className="form-grid">
+        <div className="form-grid date-fields">
           <label>
             {label(
               "due_date",
@@ -401,6 +416,16 @@ export function Editor({
             />
             {t("I reviewed the duplicate warning and want to save this bill.")}
           </label>
+        )}
+        {!!notes.length && (
+          <details className="disclosure extraction-notes">
+            <summary>{t("Extraction details")}</summary>
+            {notes.map((note) => (
+              <p className="muted" key={note}>
+                {messageText(note)}
+              </p>
+            ))}
+          </details>
         )}
         {error && (
           <p className="error" role="alert">

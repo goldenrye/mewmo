@@ -630,6 +630,10 @@ function Workspace({
   const [clock, setClock] = useState(Date.now());
   const file = useRef<HTMLInputElement>(null);
   const capture = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    if (voiceBusy && capture.current)
+      capture.current.scrollTop = capture.current.scrollHeight;
+  }, [text, voiceBusy]);
   const today = context().local_date;
   useEffect(() => {
     let live = true;
@@ -703,6 +707,10 @@ function Workspace({
   }
   async function parseInput() {
     if (!text.trim() || parsing || voiceBusy) return;
+    if (text.length > 4000) {
+      setImportError(t("Keep reminder text under 4,000 characters."));
+      return;
+    }
     setParsing(true);
     setImportError("");
     try {
@@ -1038,7 +1046,8 @@ function Workspace({
                 <div className="capture-input">
                   <textarea
                     ref={capture}
-                    rows={1}
+                    rows={3}
+                    maxLength={4000}
                     aria-label={t("Natural language input")}
                     readOnly={voiceBusy}
                     value={text}
@@ -1068,40 +1077,28 @@ function Workspace({
                     )}
                   </button>
                 </div>
-                <div className="capture-footer">
-                  <div>
-                    <button
-                      disabled={parsing || voiceBusy}
-                      onClick={() => file.current?.click()}
-                    >
-                      <Upload size={15} />
-                      {t("Import a bill")}
-                    </button>
-                  </div>
-                  <span>{t("Review before saving")}</span>
-                </div>
                 <VoiceInput
                   disabled={parsing || !!draft || !!selected}
                   aiEnabled={!!modelSettings?.enabled}
                   onBusy={setVoiceBusy}
-                  onUse={(value) => {
-                    const combined = [text.trim(), value]
-                      .filter(Boolean)
-                      .join("\n");
-                    if (combined.length > 4000) {
-                      setImportError(
-                        t(
-                          "Keep the combined reminder text under 4,000 characters.",
-                        ),
-                      );
-                      return false;
-                    }
-                    setText(combined);
+                  onReset={() => {
+                    setText("");
                     setImportError("");
-                    capture.current?.focus();
-                    return true;
+                    capture.current?.blur();
+                    capture.current
+                      ?.closest(".capture-card")
+                      ?.scrollIntoView({ block: "start" });
                   }}
-                />
+                  onText={setText}
+                >
+                  <button
+                    disabled={parsing || voiceBusy}
+                    onClick={() => file.current?.click()}
+                  >
+                    <Upload size={15} />
+                    {t("Import a bill")}
+                  </button>
+                </VoiceInput>
                 {modelSettings?.enabled && (
                   <p className="small muted">
                     {t(
