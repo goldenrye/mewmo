@@ -39,6 +39,7 @@ import {
 } from "./biometrics";
 import { Editor } from "./Editor";
 import { AccountSettings } from "./AccountSettings";
+import { VoiceInput } from "./VoiceInput";
 import {
   clearDisplayedNotifications,
   enableNotifications,
@@ -607,6 +608,7 @@ function Workspace({
   const [loading, setLoading] = useState(false);
   const [text, setText] = useState("");
   const [parsing, setParsing] = useState(false);
+  const [voiceBusy, setVoiceBusy] = useState(false);
   const [importError, setImportError] = useState("");
   const [modelSettings, setModelSettings] = useState<ModelSettings | null>(
     null,
@@ -700,7 +702,7 @@ function Workspace({
     setDraft(manualDraft(kind));
   }
   async function parseInput() {
-    if (!text.trim() || parsing) return;
+    if (!text.trim() || parsing || voiceBusy) return;
     setParsing(true);
     setImportError("");
     try {
@@ -717,7 +719,7 @@ function Workspace({
     }
   }
   async function importFile(value?: File) {
-    if (!value || parsing) return;
+    if (!value || parsing || voiceBusy) return;
     if (value.size > 12 * 1024 * 1024) {
       setImportError(t("Please choose a file smaller than 12 MB."));
       return;
@@ -1038,6 +1040,7 @@ function Workspace({
                     ref={capture}
                     rows={1}
                     aria-label={t("Natural language input")}
+                    readOnly={voiceBusy}
                     value={text}
                     onChange={(e) => setText(e.target.value)}
                     placeholder={t("e.g. Dentist tomorrow at 9am")}
@@ -1054,7 +1057,7 @@ function Workspace({
                   />
                   <button
                     className="parse-button"
-                    disabled={!text.trim() || parsing}
+                    disabled={!text.trim() || parsing || voiceBusy}
                     aria-label={t("Preview draft")}
                     onClick={() => void parseInput()}
                   >
@@ -1068,7 +1071,7 @@ function Workspace({
                 <div className="capture-footer">
                   <div>
                     <button
-                      disabled={parsing}
+                      disabled={parsing || voiceBusy}
                       onClick={() => file.current?.click()}
                     >
                       <Upload size={15} />
@@ -1077,6 +1080,28 @@ function Workspace({
                   </div>
                   <span>{t("Review before saving")}</span>
                 </div>
+                <VoiceInput
+                  disabled={parsing || !!draft || !!selected}
+                  aiEnabled={!!modelSettings?.enabled}
+                  onBusy={setVoiceBusy}
+                  onUse={(value) => {
+                    const combined = [text.trim(), value]
+                      .filter(Boolean)
+                      .join("\n");
+                    if (combined.length > 4000) {
+                      setImportError(
+                        t(
+                          "Keep the combined reminder text under 4,000 characters.",
+                        ),
+                      );
+                      return false;
+                    }
+                    setText(combined);
+                    setImportError("");
+                    capture.current?.focus();
+                    return true;
+                  }}
+                />
                 {modelSettings?.enabled && (
                   <p className="small muted">
                     {t(

@@ -14,7 +14,7 @@ An invite-only, multi-user bill and reminder app. Each person has a private acco
 
 - PDF and image import, including scanned PDFs and HEIC photos. Limits: 12 MB, 5 PDF pages, 25 megapixels.
 - In-memory drafts with uncertain fields, manual fallback, possible duplicate warnings, and account-number redaction.
-- Chinese/English/mixed text capture. iPhone voice input uses the system keyboard's dictation; no microphone control or permission.
+- Chinese/English/mixed text capture, plus an opt-in microphone using iPhone or browser system speech recognition. Keyboard dictation remains available.
 - English and Simplified Chinese interfaces, with automatic device-language detection and a saved language selector.
 - Optional per-user OpenAI, Claude, Gemini, or Doubao model settings, encrypted API keys, connection testing, and per-import image consent.
 - Full date, weekday, time, and IANA zone on every confirmation card.
@@ -209,7 +209,7 @@ Missing push credentials do not result in fake successful sends. Reminders show 
 
 ## iPhone
 
-The generated Xcode project is in `frontend/ios/App/App.xcodeproj`, using Swift Package Manager. It contains APNs registration callbacks and separate development/production entitlement settings. No `NSMicrophoneUsageDescription` is present.
+The generated Xcode project is in `frontend/ios/App/App.xcodeproj`, using Swift Package Manager. It contains APNs registration callbacks and separate development/production entitlement settings. Microphone and speech recognition permission descriptions are included in English and Simplified Chinese.
 
 ```bash
 # From frontend/. Use your actual HTTPS API origin:
@@ -221,7 +221,17 @@ Select your Apple Development Team, choose a unique bundle ID if necessary, and 
 
 The client is bundled locally, not loaded from a remote `server.url`. Native API access requires HTTPS and refuses a relative/plain-HTTP API URL. Native requests use bearer tokens and omit WebView cookies. Tokens remain in memory unless the user explicitly enables biometric sign-in as described below. Notification registration remains on the server independently of session expiry. Explicit sign-out or signing into another account disables the previous account's registrations on that installation; re-enable notifications after signing in. Other devices are unaffected. Use a device's **Disable** button to stop its deliveries remotely.
 
-Camera/photo library descriptions support importing bill photos. Dictation remains entirely owned by the iOS keyboard. A file import never marks anything paid, even if the document contains instructions to do so.
+Camera/photo library descriptions support importing bill photos. A file import never marks anything paid, even if the document contains instructions to do so.
+
+### Microphone Input
+
+On Home, choose **Speak a reminder**, select English or Mandarin, read the privacy notice, and tap **Start listening**. Recognition stops after 60 seconds or when you tap **Stop listening**. Review/edit the transcript, then **Use transcript** to append it to the reminder box. **Preview draft** uses the same client-local date and IANA time zone as typed capture; **Confirm & save** is still required to create the reminder.
+
+When AI assistance is enabled, previewing sends the transcript through the existing per-user model interpretation path. Recording and accepting a transcript do not call the LLM, upload audio to Mewmo, or save an item. Mewmo does not record audio files or persist transcripts automatically. Apple or the browser's speech provider may process audio online under their policies; this is not an offline-only feature. Recognition accuracy for mixed-language speech varies; select the main spoken language and correct the transcript before previewing.
+
+iPhone uses a registered native `SFSpeechRecognizer`/`AVAudioEngine` bridge, requests microphone and speech permission only after Start, and stops on cancellation, backgrounding, interruptions, or leaving Home. Rebuild/install the app to include the native plugin and new permission strings. Browser input uses `SpeechRecognition`/`webkitSpeechRecognition` over HTTPS (or localhost); availability depends on the browser, language, network, and device. Unsupported clients and permission failures keep typing and keyboard dictation available. No separate transcription API key is needed.
+
+Automated speech tests use simulated recognition events. Real iPhone permissions, audio routing, system speech services, and real-browser microphone recognition still require device testing.
 
 ### Face ID Sign-In
 

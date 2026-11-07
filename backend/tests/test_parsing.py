@@ -1,4 +1,4 @@
-import json
+import plistlib
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
@@ -187,8 +187,16 @@ def test_accounts_redacted_in_persisted_text(bill_input):
     assert value.payee == "Utility ****7890"
 
 
-def test_no_microphone_permission_or_control():
+def test_system_speech_permissions_and_bridge_are_present():
     root = Path(__file__).resolve().parents[2] / "frontend"
-    assert "NSMicrophoneUsageDescription" not in (root / "ios/App/App/Info.plist").read_text()
-    assert "getUserMedia" not in (root / "src/App.tsx").read_text()
-    assert "microphone" not in json.dumps(json.loads((root / "package.json").read_text())["dependencies"])
+    info = plistlib.loads((root / "ios/App/App/Info.plist").read_bytes())
+    assert info["NSMicrophoneUsageDescription"]
+    assert info["NSSpeechRecognitionUsageDescription"]
+    assert (
+        "registerPluginInstance(SpeechPlugin())"
+        in (root / "ios/App/App/BiometricSessionPlugin.swift").read_text()
+    )
+    speech = (root / "ios/App/App/SpeechPlugin.swift").read_text()
+    assert "SFSpeechAudioBufferRecognitionRequest" in speech
+    assert "didEnterBackgroundNotification" in speech
+    assert "AVAudioRecorder" not in speech

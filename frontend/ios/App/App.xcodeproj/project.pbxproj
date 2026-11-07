@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+                F5EEC0010000000000000001 /* SpeechPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5EEC0010000000000000002 /* SpeechPlugin.swift */; };
                 F1A180000000000000000001 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = F1A180000000000000000002 /* InfoPlist.strings */; };
                 FFACE0010000000000000001 /* BiometricSessionPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFACE0010000000000000002 /* BiometricSessionPlugin.swift */; };
 		2FAD9763203C412B000D30F8 /* config.xml in Resources */ = {isa = PBXBuildFile; fileRef = 2FAD9762203C412B000D30F8 /* config.xml */; };
@@ -21,6 +22,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+                F5EEC0010000000000000002 /* SpeechPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechPlugin.swift; sourceTree = "<group>"; };
                 F1A180000000000000000003 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
                 F1A180000000000000000004 /* zh-Hans */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hans"; path = "zh-Hans.lproj/InfoPlist.strings"; sourceTree = "<group>"; };
                 FFACE0010000000000000002 /* BiometricSessionPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BiometricSessionPlugin.swift; sourceTree = "<group>"; };
@@ -73,6 +75,7 @@
 				50379B222058CBB4000EE86E /* capacitor.config.json */,
 				504EC3071FED79650016851F /* AppDelegate.swift */,
                                 FFACE0010000000000000002 /* BiometricSessionPlugin.swift */,
+                                F5EEC0010000000000000002 /* SpeechPlugin.swift */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
 				504EC30E1FED79650016851F /* Assets.xcassets */,
 				504EC3101FED79650016851F /* LaunchScreen.storyboard */,
@@ -170,6 +173,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+                                F5EEC0010000000000000001 /* SpeechPlugin.swift in Sources */,
 				504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
                                 FFACE0010000000000000001 /* BiometricSessionPlugin.swift in Sources */,
 				9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */,
@@ -324,7 +328,7 @@
                                 CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 7;
+				CURRENT_PROJECT_VERSION = 8;
 				INFOPLIST_FILE = App/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -349,7 +353,7 @@
                                 CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 7;
+				CURRENT_PROJECT_VERSION = 8;
 				INFOPLIST_FILE = App/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
