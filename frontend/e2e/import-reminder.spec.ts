@@ -2,23 +2,9 @@ import { expect, test } from "@playwright/test";
 import { Buffer } from "node:buffer";
 import type { Item, Kind, Rule } from "../src/types";
 
-const kindName = {
-  bill: "Bill",
-  appointment: "Appointment",
-  dated_item: "Dated item",
-};
-const before = (minutes: number): Rule => ({
-  mode: "before",
-  minutes,
-  days: 0,
-  at: "09:00",
-});
-const day = (days: number): Rule => ({
-  mode: "day",
-  minutes: 60,
-  days,
-  at: "09:00",
-});
+const kindName = { bill: "Bill", appointment: "Appointment", dated_item: "Dated item" };
+const before = (minutes: number): Rule => ({ mode: "before", minutes, days: 0, at: "09:00" });
+const day = (days: number): Rule => ({ mode: "day", minutes: 60, days, at: "09:00" });
 const rules: Record<Kind, Rule[]> = {
   appointment: [before(1440), before(60)],
   dated_item: [before(10080), before(1440), day(0)],

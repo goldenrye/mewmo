@@ -314,18 +314,11 @@ def test_not_a_bill_image_cannot_become_a_saved_item(client, db):
 def test_ai_reminder_import_is_draft_only_without_bill_fields(client, db, kind, local):
     save(client)
     source = "Meeting\nDate: unreadable" if kind == "appointment" else "Renewal reminder"
-    suggestion = json.dumps(
-        {
-            "is_bill": False,
-            "kind": kind,
-            "title": "Review document",
-            "due_date": "2026-11-12",
-            "due_time": "14:30",
-            "amount": "40",
-            "currency": "USD",
-            "payee": "Not a bill",
-        }
-    )
+    suggestion = json.dumps({
+        "is_bill": False, "kind": kind, "title": "Review document",
+        "due_date": "2026-11-12", "due_time": "14:30",
+        "amount": "40", "currency": "USD", "payee": "Not a bill",
+    })
     with (
         patch("app.main.extract_file", return_value=source if local else "Unrecognized layout"),
         patch("app.ai_assistance.request_model", return_value=suggestion),
@@ -341,16 +334,13 @@ def test_ai_reminder_import_is_draft_only_without_bill_fields(client, db, kind, 
     assert db.scalar(select(func.count()).select_from(Reminder)) == 0
 
 
-@pytest.mark.parametrize(
-    "output",
-    [
-        {"is_bill": True, "kind": "appointment", "title": "Meeting"},
-        {"is_bill": False, "kind": "bill"},
-        {"is_bill": False},
-        {"kind": "dated_item"},
-        {"kind": "appointment", "title": "Meeting", "status": "completed"},
-    ],
-)
+@pytest.mark.parametrize("output", [
+    {"is_bill": True, "kind": "appointment", "title": "Meeting"},
+    {"is_bill": False, "kind": "bill"},
+    {"is_bill": False},
+    {"kind": "dated_item"},
+    {"kind": "appointment", "title": "Meeting", "status": "completed"},
+])
 def test_invalid_file_classification_keeps_local_reminder(client, output):
     save(client)
     with (

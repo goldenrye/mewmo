@@ -182,6 +182,9 @@ def assist_draft(
                 draft.kind = suggestion.kind
                 draft.rules = default_rules(draft.kind)
                 draft.uncertain.append("kind")
+                if draft.kind == "appointment" and "due_time" in draft.uncertain:
+                    # An appointment must not inherit the dated-item fallback time.
+                    draft.due_time = None
         for field in ("title", "payee", "amount", "currency", "due_date", "due_time"):
             if file_source and draft.kind != "bill" and field in ("payee", "amount", "currency"):
                 continue

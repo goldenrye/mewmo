@@ -59,6 +59,22 @@ CURRENCIES = {
     "YUAN": "CNY",
 }
 
+# Unicode word boundaries treat Chinese characters and digits as the same word.
+# Use numeric/ASCII guards so clocks can touch Chinese text without matching IDs.
+NUMERIC_CLOCK = re.compile(
+    r"(?<![A-Za-z0-9_:：])(?:at[ \t]+)?"
+    r"(?:(?P<period>上午|下午|晚上|早上|中午)[ \t]*)?"
+    r"(?P<hour>\d{1,2})(?:[:：](?P<minute>\d{2})[ \t]*(?P<suffix>am|pm)?|"
+    r"[ \t]*(?P<hour_suffix>am|pm))(?![A-Za-z0-9_:：])",
+    re.I,
+)
+CHINESE_CLOCK = re.compile(
+    r"(?:(上午|下午|晚上|早上|中午)\s*)?"
+    r"([\d零一二两三四五六七八九十]{1,3})(?:点|時|时)"
+    r"(?:([\d零一二三四五六七八九十]{1,3})分?|半)?"
+)
+CLOCK = re.compile(f"(?:{NUMERIC_CLOCK.pattern})|(?:{CHINESE_CLOCK.pattern})", re.I)
+
 
 def clock_number(value: str) -> int:
     if value.isdigit():
@@ -138,10 +154,7 @@ def extract_date(text: str, request: ParseRequest):
                 )
                 day = parsed.date() if parsed else None
             remainder = remainder.replace(value, "")
-    tm = re.search(
-        r"(?:(上午|下午|晚上|早上|中午)\s*)?([\d零一二两三四五六七八九十]{1,3})(?:点|時|时)(?:([\d零一二三四五六七八九十]{1,3})分?|半)?",
-        remainder,
-    )
+    tm = CHINESE_CLOCK.search(remainder)
     if tm:
         hour, minute = clock_number(tm[2]), clock_number(tm[3]) if tm[3] else (30 if "半" in tm[0] else 0)
         if tm[1] in ("下午", "晚上", "中午") and hour < 12:
@@ -149,16 +162,22 @@ def extract_date(text: str, request: ParseRequest):
         if tm[1] in ("上午", "早上") and hour == 12:
             hour = 0
     else:
-        tm = re.search(r"\b(?:at\s+)?(\d{1,2})(?::(\d{2})\s*(am|pm)?|\s*(am|pm))\b", remainder, re.I)
+        tm = NUMERIC_CLOCK.search(remainder)
         if tm:
-            hour, minute = int(tm[1]), int(tm[2] or 0)
-            meridiem = (tm[3] or tm[4] or "").lower()
+            hour, minute = int(tm["hour"]), int(tm["minute"] or 0)
+            meridiem = (tm["suffix"] or tm["hour_suffix"] or "").lower()
             if meridiem:
-                hour = hour % 12 + (12 if meridiem == "pm" else 0)
+                hour = hour % 12 + (12 if meridiem == "pm" else 0) if 1 <= hour <= 12 else -1
+            elif tm["period"] in ("下午", "晚上", "中午") and hour < 12:
+                hour += 12
+            elif tm["period"] in ("上午", "早上") and hour == 12:
+                hour = 0
     if tm:
         if 0 <= hour <= 23 and 0 <= minute <= 59:
             clock = f"{hour:02}:{minute:02}"
-        remainder = remainder.replace(tm[0], "")
+            remainder = remainder.replace(tm[0], "")
+        else:
+            uncertain.append("due_time")
     return day, clock, remainder, uncertain
 
 
@@ -177,7 +196,7 @@ def parse_text(request: ParseRequest) -> Draft:
         timezone=request.timezone,
         kind=kind,
         due_date=day,
-        due_time=clock or ("09:00" if kind != "appointment" else None),
+        due_time=clock or ("09:00" if kind != "appointment" and "due_time" not in uncertain else None),
         uncertain=uncertain,
         rules=default_rules(kind),
     )
@@ -210,7 +229,7 @@ def parse_text(request: ParseRequest) -> Draft:
         draft.uncertain.append("payee")
     if not day:
         draft.uncertain.append("due_date")
-    if not draft.due_time:
+    if not clock:
         draft.uncertain.append("due_time")
     if not draft.title:
         draft.uncertain.append("title")

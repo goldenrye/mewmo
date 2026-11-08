@@ -3,7 +3,7 @@
 import re
 
 from .bill_fields import DATE, MONTH, dates_in_row, labelled_values
-from .parsing import ParseFailure, extract_date, parse_bill
+from .parsing import CLOCK, ParseFailure, extract_date, parse_bill
 from .schemas import Draft, ParseRequest, default_rules, redact_accounts
 
 APPOINTMENT = re.compile(
@@ -25,12 +25,6 @@ DATE_LABEL = re.compile(
 TIME_LABEL = re.compile(
     r"\b(?:(?:appointment|meeting|event|start)\s+)?time\b[: ]*|"
     r"(?:预约时间|会议时间|活动时间|时间)[：: ]*",
-    re.I,
-)
-CLOCK = re.compile(
-    r"\b\d{1,2}:\d{2}\s*(?:am|pm)?\b|\b\d{1,2}\s*(?:am|pm)\b|"
-    r"(?:上午|下午|晚上|早上|中午)?\s*[\d零一二两三四五六七八九十]{1,3}"
-    r"(?:点|時|时)(?:[\d零一二三四五六七八九十]{1,3}分?|半)?",
     re.I,
 )
 RELATIVE = re.compile(
