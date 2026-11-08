@@ -66,6 +66,7 @@ class ModelPreference(Base):
     encrypted_key: Mapped[str] = mapped_column(Text)
     enabled: Mapped[bool] = mapped_column(default=False)
     allow_images: Mapped[bool] = mapped_column(default=False)
+    allow_note_search: Mapped[bool] = mapped_column(default=False)
 
 
 class Item(Base):

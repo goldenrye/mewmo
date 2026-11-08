@@ -35,7 +35,8 @@ class NoteUpdate(NoteInput):
 class SearchInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     query: str = Field(min_length=1, max_length=500)
-    use_ai: bool = False
+    # Legacy clients may still opt out per search, but cannot override settings.
+    use_ai: bool | None = None
     offset: int = Field(default=0, ge=0)
     limit: int = Field(default=50, ge=1, le=50)
 
@@ -76,7 +77,9 @@ def list_notes(
 
 @router.post("/search")
 def find_notes(body: SearchInput, db: Session = Depends(session), user: User = Depends(require_user)):
-    terms, mode, warning = search_terms(body.query, db.get(ModelPreference, user.id), body.use_ai)
+    preference = db.get(ModelPreference, user.id)
+    use_ai = bool(preference and preference.allow_note_search and body.use_ai is not False)
+    terms, mode, warning = search_terms(body.query, preference, use_ai)
     if not terms:
         return {"items": [], "total": 0, "mode": mode, "warning": warning}
     # Bound parameters and escaped LIKE patterns keep dictated text literal.

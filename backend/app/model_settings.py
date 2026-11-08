@@ -27,6 +27,7 @@ class ModelSettingsInput(BaseModel):
     api_key: SecretStr | None = Field(default=None, min_length=1, max_length=2048)
     enabled: bool = False
     allow_images: bool = False
+    allow_note_search: bool | None = None
 
     @field_validator("api_key")
     @classmethod
@@ -69,6 +70,7 @@ def preference_json(row: ModelPreference | None):
         "has_key": bool(row),
         "enabled": row.enabled if row else False,
         "allow_images": row.allow_images if row else False,
+        "allow_note_search": row.allow_note_search if row else True,
     }
 
 
@@ -102,6 +104,9 @@ def save_preferences(
         row.encrypted_key = cipher().encrypt(payload).decode("ascii")
     row.provider, row.model = body.provider, body.model
     row.enabled, row.allow_images = body.enabled, body.allow_images
+    # Older clients do not send this field; never grant new consent implicitly.
+    if body.allow_note_search is not None:
+        row.allow_note_search = body.allow_note_search
     db.commit()
     return preference_json(row)
 

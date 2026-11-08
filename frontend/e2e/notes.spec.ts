@@ -262,7 +262,7 @@ test("switching capture modes cancels microphone and stale recognition", async (
   await expect(page.getByLabel("Natural language input")).toHaveValue("");
 });
 
-test("note search uses explicit consent and has an honest empty state", async ({
+test("note search follows Settings without a per-search checkbox", async ({
   page,
 }) => {
   await page.route("**/api/model-settings", (route) =>
@@ -274,6 +274,7 @@ test("note search uses explicit consent and has an honest empty state", async ({
         model: "test",
         provider: "openai",
         allow_images: false,
+        allow_note_search: true,
       },
     }),
   );
@@ -287,8 +288,8 @@ test("note search uses explicit consent and has an honest empty state", async ({
   });
   await page.getByRole("button", { name: "Find notes", exact: true }).click();
   await expect(
-    page.getByLabel("Use AI to understand this search"),
-  ).not.toBeChecked();
+    page.locator(".notes-workspace input[type=checkbox]"),
+  ).toHaveCount(0);
   await page
     .getByRole("textbox", { name: "Search notes", exact: true })
     .fill("the notes about the floor");
@@ -297,14 +298,9 @@ test("note search uses explicit consent and has an honest empty state", async ({
   await expect(
     page.getByRole("heading", { name: "No matching notes" }),
   ).toBeVisible();
-  expect(calls[0].use_ai).toBe(false);
-  await page.getByLabel("Use AI to understand this search").check();
-  await page.getByRole("button", { name: "Search notes", exact: true }).click();
-  await expect.poll(() => calls.length).toBe(2);
-  expect(calls[1]).toEqual({
+  expect(calls[0]).toEqual({
     query: "the notes about the floor",
     offset: 0,
-    use_ai: true,
   });
 });
 

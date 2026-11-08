@@ -1053,7 +1053,6 @@ function Workspace({
           )}
           {page === "overview" && homeView === "notes" && (
             <Notes
-              aiEnabled={!!modelSettings?.enabled}
               blocked={!!draft || !!selected}
               onReminder={(note) => {
                 setEditId(undefined);

@@ -79,6 +79,7 @@ export type ModelSettings = {
   has_key: boolean;
   enabled: boolean;
   allow_images: boolean;
+  allow_note_search: boolean;
 };
 export type Invitation = {
   id: string;

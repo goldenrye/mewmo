@@ -14,6 +14,7 @@ export function AISettings({
   const [key, setKey] = useState("");
   const [enabled, setEnabled] = useState(false);
   const [images, setImages] = useState(false);
+  const [noteSearch, setNoteSearch] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
   const [remove, setRemove] = useState(false);
@@ -27,6 +28,7 @@ export function AISettings({
     setModel(value.model);
     setEnabled(value.enabled);
     setImages(value.allow_images);
+    setNoteSearch(value.allow_note_search ?? !value.has_key);
     setKey("");
     setDirty(false);
   }
@@ -60,6 +62,7 @@ export function AISettings({
           api_key: key || null,
           enabled,
           allow_images: images,
+          allow_note_search: noteSearch,
         }),
       });
       apply(value);
@@ -98,6 +101,7 @@ export function AISettings({
         has_key: false,
         enabled: false,
         allow_images: false,
+        allow_note_search: true,
       };
       apply(value);
       onChange(value);
@@ -113,7 +117,7 @@ export function AISettings({
     <section className="settings-card account-card ai-settings">
       <h2>{t("AI assistance")}</h2>
       <p className="muted">
-        {t("Use your own model for reminder imports and text capture.")}
+        {t("Use your own model for reminders and note search.")}
       </p>
       {saved && (
         <p>
@@ -226,6 +230,27 @@ export function AISettings({
                   "Notes are saved without AI rewriting. Optional AI note search sends only your search phrase, never your saved notes.",
                 )}
               </p>
+              <label className="ai-toggle">
+                <input
+                  type="checkbox"
+                  disabled={!saved.available || !enabled}
+                  checked={noteSearch}
+                  onChange={(event) => setNoteSearch(event.target.checked)}
+                />
+                <span>{t("Use AI for note search")}</span>
+              </label>
+              <p className="muted">
+                {t(
+                  "Automatically interpret typed and spoken searches using this model. Only your search phrase is sent, never saved notes. Provider charges may apply. If AI is unavailable, search uses local matching.",
+                )}
+              </p>
+              {saved.has_key && !saved.allow_note_search && (
+                <p className="muted">
+                  {t(
+                    "Note search stays local until you enable this setting and save.",
+                  )}
+                </p>
+              )}
               <label className="ai-toggle">
                 <input
                   type="checkbox"

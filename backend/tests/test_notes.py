@@ -27,7 +27,7 @@ def create(client, **values):
     return response.json()
 
 
-def ai(client, monkeypatch, enabled=True):
+def ai(client, monkeypatch, enabled=True, allow_note_search=True):
     monkeypatch.setattr(settings(), "llm_encryption_key", Fernet.generate_key().decode())
     assert (
         client.put(
@@ -37,6 +37,7 @@ def ai(client, monkeypatch, enabled=True):
                 "model": "test",
                 "api_key": "test-key",
                 "enabled": enabled,
+                "allow_note_search": allow_note_search,
             },
         ).status_code
         == 200
@@ -195,6 +196,44 @@ def test_ai_requires_both_account_setting_and_search_opt_in(client, monkeypatch,
         result = client.post("/api/notes/search", json={"query": "floor", "use_ai": use_ai}).json()
     model.assert_not_called()
     assert result["mode"] == "local" and result["total"] == 1
+
+
+@pytest.mark.parametrize("enabled", [False, True])
+@pytest.mark.parametrize("allowed", [False, True])
+@pytest.mark.parametrize("override", [None, False, True])
+def test_search_uses_saved_preference_and_legacy_requests_cannot_bypass_it(
+    client, monkeypatch, enabled, allowed, override
+):
+    ai(client, monkeypatch, enabled, allowed)
+    create(client)
+    body = {"query": "the notes about the floor"}
+    if override is not None:
+        body["use_ai"] = override
+    with patch("app.note_search.request_model", return_value='{"terms":["floor"]}') as model:
+        result = client.post("/api/notes/search", json=body).json()
+    expected = enabled and allowed and override is not False
+    assert model.call_count == int(expected)
+    assert result["mode"] == ("ai" if expected else "local")
+    assert result["total"] == 1
+
+
+def test_new_search_picks_up_preference_changes_without_client_flag(client, monkeypatch):
+    ai(client, monkeypatch)
+    create(client)
+    with patch("app.note_search.request_model", return_value='{"terms":["floor"]}') as model:
+        assert client.post("/api/notes/search", json={"query": "floor"}).json()["mode"] == "ai"
+        response = client.put(
+            "/api/model-settings",
+            json={
+                "provider": "openai",
+                "model": "test",
+                "enabled": True,
+                "allow_note_search": False,
+            },
+        )
+        assert response.status_code == 200
+        assert client.post("/api/notes/search", json={"query": "floor"}).json()["mode"] == "local"
+    assert model.call_count == 1
 
 
 @pytest.mark.parametrize(

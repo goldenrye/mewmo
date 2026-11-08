@@ -14,11 +14,9 @@ import type { Note, NoteResults } from "./types";
 import "./notes.css";
 
 export function Notes({
-  aiEnabled,
   blocked,
   onReminder,
 }: {
-  aiEnabled: boolean;
   blocked: boolean;
   onReminder: (note: Note) => void;
 }) {
@@ -35,14 +33,12 @@ export function Notes({
   const [editor, setEditor] = useState<
     (Pick<Note, "title" | "body"> & Partial<Note>) | null
   >(null);
-  const [useAI, setUseAI] = useState(false);
-  const [activeAI, setActiveAI] = useState(false);
   const request = useRef(0);
   const input = useRef<HTMLTextAreaElement>(null);
   const text = mode === "write" ? noteText : query;
   const setText = mode === "write" ? setNoteText : setQuery;
 
-  async function load(search: string | null, nextOffset = 0, withAI = false) {
+  async function load(search: string | null, nextOffset = 0) {
     const id = ++request.current;
     setBusy(true);
     setError("");
@@ -56,14 +52,12 @@ export function Notes({
               body: JSON.stringify({
                 query: search,
                 offset: nextOffset,
-                use_ai: withAI,
               }),
             });
       if (id !== request.current) return;
       setResult(found);
       setOffset(nextOffset);
       setActiveQuery(search);
-      setActiveAI(withAI);
     } catch (reason) {
       if (id === request.current) setError((reason as Error).message);
     } finally {
@@ -91,9 +85,6 @@ export function Notes({
     };
   }, []);
   useEffect(() => {
-    if (!aiEnabled) setUseAI(false);
-  }, [aiEnabled]);
-  useEffect(() => {
     if (voiceBusy && input.current)
       input.current.scrollTop = input.current.scrollHeight;
   }, [text, voiceBusy]);
@@ -112,7 +103,7 @@ export function Notes({
     }
     setError("");
     setMessage("");
-    if (mode === "find") void load(query.trim(), 0, useAI && aiEnabled);
+    if (mode === "find") void load(query.trim());
     else
       setEditor({
         title: noteText.trim().split(/\n/)[0].slice(0, 80),
@@ -214,24 +205,6 @@ export function Notes({
               ?.scrollIntoView({ block: "start" });
           }}
         />
-        {mode === "find" && aiEnabled && (
-          <label className="ai-toggle note-ai">
-            <input
-              type="checkbox"
-              checked={useAI}
-              disabled={voiceBusy || busy}
-              onChange={(event) => setUseAI(event.target.checked)}
-            />
-            <span>
-              {t("Use AI to understand this search")}
-              <small>
-                {t(
-                  "Only your search phrase is sent to your provider, not saved notes.",
-                )}
-              </small>
-            </span>
-          </label>
-        )}
       </section>
       {error && (
         <div role="alert" className="error">
@@ -308,9 +281,7 @@ export function Notes({
               className="secondary"
               aria-label={t("Previous notes")}
               disabled={busy || offset === 0}
-              onClick={() =>
-                void load(activeQuery, offset - 50, activeAI && aiEnabled)
-              }
+              onClick={() => void load(activeQuery, offset - 50)}
             >
               <ChevronLeft size={20} />
             </button>
@@ -325,9 +296,7 @@ export function Notes({
               className="secondary"
               aria-label={t("Next notes")}
               disabled={busy || offset + 50 >= result.total}
-              onClick={() =>
-                void load(activeQuery, offset + 50, activeAI && aiEnabled)
-              }
+              onClick={() => void load(activeQuery, offset + 50)}
             >
               <ChevronRight size={20} />
             </button>
@@ -343,12 +312,12 @@ export function Notes({
             setEditor(null);
             setNoteText("");
             setMessage("Note saved.");
-            void load(activeQuery, 0, activeAI && aiEnabled);
+            void load(activeQuery);
           }}
           onDeleted={() => {
             setEditor(null);
             setMessage("Note deleted.");
-            void load(activeQuery, 0, activeAI && aiEnabled);
+            void load(activeQuery);
           }}
           onReminder={(note) => {
             setEditor(null);

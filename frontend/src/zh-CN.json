@@ -1,4 +1,8 @@
 {
+  "Use your own model for reminders and note search.": "使用自己的模型辅助提醒和笔记搜索。",
+  "Use AI for note search": "使用 AI 搜索笔记",
+  "Automatically interpret typed and spoken searches using this model. Only your search phrase is sent, never saved notes. Provider charges may apply. If AI is unavailable, search uses local matching.": "自动使用此模型理解文字和语音搜索。仅发送搜索语句，不发送已保存的笔记。服务商可能收取费用；AI 不可用时使用本地匹配。",
+  "Note search stays local until you enable this setting and save.": "开启此设置并保存后才会使用 AI 搜索笔记，否则保持本地搜索。",
   "Notes": "笔记",
   "Note": "笔记",
   "Home content": "首页内容",

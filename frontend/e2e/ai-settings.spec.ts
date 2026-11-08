@@ -8,6 +8,7 @@ const empty: ModelSettings = {
   has_key: false,
   enabled: false,
   allow_images: false,
+  allow_note_search: true,
 };
 const secret = "fake-test-api-key-not-a-real-secret";
 
@@ -57,6 +58,7 @@ async function mockSettings(page: Page, initial = empty, testFails = false) {
         has_key: true,
         enabled: body.enabled,
         allow_images: body.allow_images,
+        allow_note_search: body.allow_note_search,
       };
     }
     if (request.method() === "DELETE") {
@@ -80,6 +82,7 @@ test("configure, test, disable, and remove a private model without displaying it
   await panel.getByLabel("Model ID").fill("claude-example-model");
   await panel.getByLabel("API key", { exact: true }).fill(secret);
   await panel.getByLabel("Enable AI assistance").check();
+  await expect(panel.getByLabel("Use AI for note search")).toBeChecked();
   await panel.getByLabel("Allow optional image analysis").check();
   await panel.getByRole("button", { name: "Save AI settings" }).click();
   await expect(panel.getByText("AI settings saved.")).toBeVisible();
@@ -88,6 +91,7 @@ test("configure, test, disable, and remove a private model without displaying it
     api_key: secret,
     enabled: true,
     allow_images: true,
+    allow_note_search: true,
   });
   await expect(panel.getByLabel("API key", { exact: true })).toHaveValue("");
   expect(await page.evaluate(() => JSON.stringify(localStorage))).not.toContain(
@@ -96,6 +100,7 @@ test("configure, test, disable, and remove a private model without displaying it
   await panel.getByRole("button", { name: "Test saved model" }).click();
   await expect(panel.getByText("Connection successful.")).toBeVisible();
   await panel.getByLabel("Enable AI assistance").uncheck();
+  await expect(panel.getByLabel("Use AI for note search")).toBeDisabled();
   await panel.getByRole("button", { name: "Save AI settings" }).click();
   await expect(panel.getByText("Local parsing only.")).toBeVisible();
   expect(writes[1].api_key).toBeNull();
@@ -107,6 +112,43 @@ test("configure, test, disable, and remove a private model without displaying it
     panel.getByText("Model removed. Local parsing is still available."),
   ).toBeVisible();
   await expect(panel.getByLabel("Model ID")).toHaveValue("");
+});
+
+test("existing users enable note search in Settings and the preference survives reload", async ({
+  page,
+}) => {
+  const writes = await mockSettings(page, {
+    ...empty,
+    has_key: true,
+    model: "saved-model",
+    enabled: true,
+    allow_note_search: false,
+  });
+  await login(page);
+  const panel = await openSettings(page);
+  await expect(panel.getByLabel("Use AI for note search")).not.toBeChecked();
+  await expect(
+    panel.getByText(
+      "Note search stays local until you enable this setting and save.",
+    ),
+  ).toBeVisible();
+  await expect(
+    panel.getByText(/Only your search phrase is sent, never saved notes/),
+  ).toBeVisible();
+  await panel.getByRole("button", { name: "Save AI settings" }).click();
+  await expect.poll(() => writes.length).toBe(1);
+  expect(writes[0].allow_note_search).toBe(false);
+  await panel.getByLabel("Use AI for note search").check();
+  await panel.getByRole("button", { name: "Save AI settings" }).click();
+  await expect.poll(() => writes.length).toBe(2);
+  expect(writes[1].allow_note_search).toBe(true);
+  await page.reload();
+  const restored = await openSettings(page);
+  await expect(restored.getByLabel("Use AI for note search")).toBeChecked();
+  await restored.getByLabel("Use AI for note search").uncheck();
+  await restored.getByRole("button", { name: "Save AI settings" }).click();
+  await expect.poll(() => writes.length).toBe(3);
+  expect(writes[2].allow_note_search).toBe(false);
 });
 
 test("provider changes clear the key and require fresh consent; failures remain usable", async ({
@@ -150,6 +192,7 @@ test("Chinese AI settings fit narrow screens and retain form values when switchi
   await page.getByLabel("Language").selectOption("zh-CN");
   await expect(panel.getByRole("heading", { name: "AI 辅助" })).toBeVisible();
   await expect(panel.getByLabel("模型 ID")).toHaveValue("example-model");
+  await expect(panel.getByLabel("使用 AI 搜索笔记")).toBeVisible();
   for (const width of [320, 390, 1024]) {
     await page.setViewportSize({ width, height: 844 });
     expect(
