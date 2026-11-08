@@ -1,0 +1,95 @@
+.home-switch {
+  width: min(100%, 360px);
+  margin: 0 0 20px;
+}
+.home-switch button {
+  flex: 1;
+  min-width: 0;
+}
+.note-modes {
+  margin-bottom: 12px;
+}
+.notes-workspace .capture-card > .small {
+  margin: 8px 0 12px;
+}
+.note-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  width: 100%;
+  padding: 18px;
+  margin: 12px 0;
+  text-align: left;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+.note-card > svg {
+  flex-shrink: 0;
+  color: var(--accent-hover);
+  margin-top: 3px;
+}
+.note-card > span {
+  min-width: 0;
+  flex: 1;
+}
+.note-card strong {
+  display: block;
+  font-size: 1.0625rem;
+  overflow-wrap: anywhere;
+}
+.note-excerpt {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  font-size: var(--text-small);
+  margin-top: 6px;
+  color: var(--muted);
+}
+.note-body {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 18px 0;
+}
+.note-title {
+  overflow-wrap: anywhere;
+}
+.note-dialog textarea {
+  width: 100%;
+  min-width: 0;
+  resize: vertical;
+  padding: 12px;
+  font: inherit;
+  line-height: 1.5;
+  border: 1px solid var(--control-line);
+  border-radius: 8px;
+  color: var(--ink);
+  background: white;
+}
+.note-actions,
+.note-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+.note-pagination {
+  justify-content: space-between;
+  margin-top: 20px;
+}
+.note-ai {
+  margin-top: 12px;
+}
+.note-ai small {
+  display: block;
+  color: var(--muted);
+  margin-top: 4px;
+}
+.notes-workspace .section-heading {
+  flex-wrap: wrap;
+  gap: 10px;
+}

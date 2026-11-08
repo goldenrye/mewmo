@@ -40,6 +40,7 @@ import {
 import { Editor } from "./Editor";
 import { AccountSettings } from "./AccountSettings";
 import { VoiceInput } from "./VoiceInput";
+import { Notes } from "./Notes";
 import {
   clearDisplayedNotifications,
   enableNotifications,
@@ -600,6 +601,7 @@ function Workspace({
   onSignOut: () => Promise<void>;
 }) {
   const [page, setPage] = useState<Page>("overview");
+  const [homeView, setHomeView] = useState<"reminders" | "notes">("reminders");
   const [items, setItems] = useState<Item[]>([]);
   const [finished, setFinished] = useState<Item[]>([]);
   const [devices, setDevices] = useState<Device[]>([]);
@@ -997,7 +999,7 @@ function Workspace({
           <div className="page-heading">
             <div>
               <h1>{t(page[0].toUpperCase() + page.slice(1))}</h1>
-              {page === "overview" && (
+              {page === "overview" && homeView === "reminders" && (
                 <p>
                   {t("{count} open", { count: items.length })}
                   {overdue.length > 0
@@ -1006,13 +1008,37 @@ function Workspace({
                 </p>
               )}
             </div>
-            {(page === "overview" || page === "calendar") && (
+            {((page === "overview" && homeView === "reminders") ||
+              page === "calendar") && (
               <button className="primary add-item" onClick={() => newItem()}>
                 <Plus size={20} />
                 {t("Add item")}
               </button>
             )}
           </div>
+          {page === "overview" && (
+            <div
+              className="segmented home-switch"
+              aria-label={t("Home content")}
+            >
+              <button
+                className={homeView === "reminders" ? "active" : ""}
+                aria-pressed={homeView === "reminders"}
+                disabled={parsing}
+                onClick={() => setHomeView("reminders")}
+              >
+                {t("Reminders")}
+              </button>
+              <button
+                className={homeView === "notes" ? "active" : ""}
+                aria-pressed={homeView === "notes"}
+                disabled={parsing}
+                onClick={() => setHomeView("notes")}
+              >
+                {t("Notes")}
+              </button>
+            </div>
+          )}
           {error && (
             <div className="error global-error" role="alert">
               {messageText(error)}
@@ -1025,7 +1051,26 @@ function Workspace({
               </button>
             </div>
           )}
-          {page === "overview" && (
+          {page === "overview" && homeView === "notes" && (
+            <Notes
+              aiEnabled={!!modelSettings?.enabled}
+              blocked={!!draft || !!selected}
+              onReminder={(note) => {
+                setEditId(undefined);
+                setDraft({
+                  ...manualDraft("dated_item"),
+                  title: note.title,
+                  due_date: null,
+                  due_time: null,
+                  uncertain: ["due_date", "due_time"],
+                  warnings: [
+                    "Your note stays unchanged. Choose when to be reminded, then confirm.",
+                  ],
+                });
+              }}
+            />
+          )}
+          {page === "overview" && homeView === "reminders" && (
             <>
               <section
                 className={`capture-card ${dragging ? "dragging" : ""}`}
@@ -1155,7 +1200,7 @@ function Workspace({
               )}
             </div>
           )}
-          {(page === "overview" ||
+          {((page === "overview" && homeView === "reminders") ||
             page === "calendar" ||
             page === "history") && (
             <div className="content-grid">
@@ -1425,11 +1470,11 @@ function Workspace({
               </p>
               <div className="setting-line">
                 <strong>{t("Voice input")}</strong>
-                <span>{t("Keyboard dictation")}</span>
+                <span>{t("System speech recognition")}</span>
               </div>
               <p className="muted">
                 {t(
-                  "Use your iPhone keyboard's dictation key. Mewmo does not access your microphone.",
+                  "System speech may process audio online. Mewmo does not store recordings.",
                 )}
               </p>
             </details>

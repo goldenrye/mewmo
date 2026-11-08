@@ -86,7 +86,7 @@ test("each page has readable content and settings are progressively disclosed", 
         .filter({ hasText: "Privacy & preferences" })
         .click();
       await expect(
-        page.getByText("Keyboard dictation", { exact: true }),
+        page.getByText("System speech recognition", { exact: true }),
       ).toBeVisible();
       await expectReadable(page);
     }

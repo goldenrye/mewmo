@@ -4,6 +4,7 @@ import os
 import tempfile
 
 import uvicorn
+from cryptography.fernet import Fernet
 
 from app.auth import password_hash
 
@@ -11,6 +12,7 @@ with tempfile.TemporaryDirectory(prefix="mewmo-browser-") as directory:
     os.environ["DATABASE_URL"] = f"sqlite:///{directory}/test.db"
     os.environ["OWNER_PASSWORD_HASH"] = password_hash("mewmo-local-test")
     os.environ["COOKIE_SECURE"] = "false"
+    os.environ["LLM_ENCRYPTION_KEY"] = Fernet.generate_key().decode()
     os.environ["CORS_ORIGINS"] = "http://localhost:5173,http://127.0.0.1:5173,capacitor://localhost"
     os.environ["PUBLIC_WEB_URL"] = "http://localhost:5173"
 

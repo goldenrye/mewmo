@@ -88,6 +88,19 @@ class Item(Base):
     __table_args__ = (Index("ix_items_status_due", "status", "due_at"),)
 
 
+class Note(Base):
+    __tablename__ = "notes"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    title: Mapped[str] = mapped_column(String(180))
+    body: Mapped[str] = mapped_column(Text)
+    search_text: Mapped[str] = mapped_column(Text)
+    version: Mapped[int] = mapped_column(default=1)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now, onupdate=now)
+    __table_args__ = (Index("ix_notes_user_updated", "user_id", "updated_at"),)
+
+
 class Reminder(Base):
     __tablename__ = "reminders"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)

@@ -50,6 +50,20 @@ export type Reminder = {
   }[];
 };
 export type Device = { id: string; platform: string; active: boolean };
+export type Note = {
+  id: string;
+  title: string;
+  body: string;
+  version: number;
+  created_at: string;
+  updated_at: string;
+};
+export type NoteResults = {
+  items: Note[];
+  total: number;
+  mode: "local" | "ai";
+  warning: string | null;
+};
 export type User = {
   id: string;
   username: string;

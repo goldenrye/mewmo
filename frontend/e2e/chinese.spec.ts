@@ -75,7 +75,7 @@ test("Chinese device language covers login errors and all main pages", async ({
   }
   await expect(page.getByRole("heading", { name: "我的账户" })).toBeVisible();
   await page.locator("summary").filter({ hasText: "隐私与偏好" }).click();
-  await expect(page.getByText("键盘听写", { exact: true })).toBeVisible();
+  await expect(page.getByText("系统语音识别", { exact: true })).toBeVisible();
 });
 
 test("language switching retains login inputs and persists across reload", async ({

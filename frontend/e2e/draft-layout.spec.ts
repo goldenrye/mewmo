@@ -48,14 +48,12 @@ for (const language of ["en", "zh-CN"]) {
     await expect(notes).not.toHaveAttribute("open");
     await expect(dialog.locator(".draft-source")).toBeVisible();
     await expect(
-      dialog
-        .locator(".notice")
-        .filter({
-          hasText:
-            language === "en"
-              ? "AI assistance was unavailable"
-              : "AI 辅助暂不可用",
-        }),
+      dialog.locator(".notice").filter({
+        hasText:
+          language === "en"
+            ? "AI assistance was unavailable"
+            : "AI 辅助暂不可用",
+      }),
     ).toBeVisible();
     await expect(dialog.locator(".checkbox-label.notice")).toBeVisible();
     await expect(dialog.locator(".date-preview")).toContainText("2026");
@@ -63,33 +61,41 @@ for (const language of ["en", "zh-CN"]) {
     await dialog.locator(".rules summary").click();
     for (const width of [320, 390, 520, 768]) {
       await page.setViewportSize({ width, height: 850 });
-      const failures = await dialog.evaluate((root) => {
-        const controls = Array.from(
-          root.querySelectorAll<HTMLElement>(
-            "input:not([type=checkbox]), select, .rule-row button",
-          ),
-        ).filter((node) => node.getClientRects().length);
-        const bad: string[] = [];
-        for (const [index, control] of controls.entries()) {
-          const a = control.getBoundingClientRect();
-          const parent = control.parentElement!.getBoundingClientRect();
-          if (a.left < parent.left - 1 || a.right > parent.right + 1)
-            bad.push(
-              `Overflow: ${control.getAttribute("aria-label") || control.outerHTML}`,
-            );
-          for (const other of controls.slice(index + 1)) {
-            const b = other.getBoundingClientRect();
-            if (
-              Math.min(a.right, b.right) - Math.max(a.left, b.left) > 1 &&
-              Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 1
-            )
-              bad.push("Overlapping controls");
-          }
-        }
-        if (root.scrollWidth > root.clientWidth) bad.push("Dialog overflow");
-        return bad;
-      });
-      expect(failures, `width ${width}`).toEqual([]);
+      await expect
+        .poll(
+          () =>
+            dialog.evaluate((root) => {
+              const controls = Array.from(
+                root.querySelectorAll<HTMLElement>(
+                  "input:not([type=checkbox]), select, .rule-row button",
+                ),
+              ).filter((node) => node.getClientRects().length);
+              const bad: string[] = [];
+              for (const [index, control] of controls.entries()) {
+                const a = control.getBoundingClientRect();
+                const parent = control.parentElement!.getBoundingClientRect();
+                if (a.left < parent.left - 1 || a.right > parent.right + 1)
+                  bad.push(
+                    `Overflow: ${control.getAttribute("aria-label") || control.outerHTML}`,
+                  );
+                for (const other of controls.slice(index + 1)) {
+                  const b = other.getBoundingClientRect();
+                  if (
+                    Math.min(a.right, b.right) - Math.max(a.left, b.left) > 1 &&
+                    Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 1
+                  )
+                    bad.push(
+                      `Overlapping controls: ${control.outerHTML} / ${other.outerHTML}`,
+                    );
+                }
+              }
+              if (root.scrollWidth > root.clientWidth)
+                bad.push("Dialog overflow");
+              return bad;
+            }),
+          { message: `width ${width}` },
+        )
+        .toEqual([]);
     }
     await notes.locator("summary").click();
     await expect(notes.locator("p")).toHaveCount(2);

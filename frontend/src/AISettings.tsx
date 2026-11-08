@@ -221,6 +221,11 @@ export function AISettings({
                   "When enabled, new captures send typed input or OCR text to this provider. Recognizable account numbers are redacted, but text may contain other personal information.",
                 )}
               </p>
+              <p className="muted">
+                {t(
+                  "Notes are saved without AI rewriting. Optional AI note search sends only your search phrase, never your saved notes.",
+                )}
+              </p>
               <label className="ai-toggle">
                 <input
                   type="checkbox"

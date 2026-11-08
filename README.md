@@ -1,6 +1,6 @@
 # Mewmo
 
-An invite-only, multi-user bill and reminder app. Each person has a private account. Capture an item, review the draft, confirm it, get reminded, and stop reminders when it is handled.
+An invite-only, multi-user bill, reminder, and notes app. Each person has a private account. Capture an item, review the draft, confirm it, get reminded, and stop reminders when it is handled. Keep undated notes alongside reminders and find them later by typing or speaking.
 
 ## Stack
 
@@ -15,9 +15,10 @@ An invite-only, multi-user bill and reminder app. Each person has a private acco
 - PDF and image import for bills, appointments/events, and dated reminder notices, including scanned PDFs and HEIC photos. Limits: 12 MB, 5 PDF pages, 25 megapixels.
 - In-memory drafts with uncertain fields, manual fallback, possible duplicate warnings, and account-number redaction.
 - Chinese/English/mixed text capture, plus an opt-in microphone using iPhone or browser system speech recognition. Keyboard dictation remains available.
+- Undated notes with text/audio capture, explicit save confirmation, editing/deletion, and contextual text/audio search.
 - English and Simplified Chinese interfaces, with automatic device-language detection and a saved language selector.
 - Optional per-user OpenAI, Claude, Gemini, or Doubao model settings, encrypted API keys, connection testing, and per-import image consent.
-- Full date, weekday, time, and IANA zone on every confirmation card.
+- Full date, weekday, time, and IANA zone on every reminder confirmation card; notes have no due date or notifications.
 - Manual create/edit/delete, overdue-first home, search, calendar, one-tap paid/completed, undo, and history.
 - Editable reminder rules; each fire time has a database row and per-device delivery audit.
 - A 60-second worker scan with retry, cancellation, rescheduling, and future-only restoration on undo.
@@ -28,6 +29,23 @@ An invite-only, multi-user bill and reminder app. Each person has a private acco
 Parsing is deliberately conservative, not an open-ended AI assistant. Common relative dates, explicit dates, weekdays, numeric Chinese month/day dates, Chinese times, and labelled invoice fields are supported. Ambiguous currencies and missing information require review. For example, `这个月水电 120 刀，已付` produces a paid bill draft with amount 120, a currency warning, and a missing due date to fill in. A statement about "this month" does not invent a deadline.
 
 **Parsing never creates items or reminders.** Only a separate item request with `confirmed: true` writes an item. Drafts are neither stored in the database nor cached in browser storage.
+
+### Notes and Voice Search
+
+Home has a **Reminders / Notes** switch; the existing Calendar, History, Alerts, and Settings navigation stays unchanged. Notes never appear as overdue, in the calendar, or in reminder delivery/history.
+
+1. Choose **Notes > Write a note**. Type details such as `Living room floor: 12500 mm by 6400 mm`, or choose **Add a note by audio**. System speech fills the same editable text box.
+2. Choose **Preview note**, review the suggested title and full text, then **Confirm & save**. Notes require no date/time. They retain your text and numbers without AI rewriting. Limits: 180-character title and 10,000-character body.
+3. Choose **Find notes**. Type or dictate a phrase such as `the notes about the floor` or `找一下关于地板的笔记`, then explicitly search. Open a matching card to read the complete saved note. Search does not create or change anything.
+4. Open a note to edit/delete it or choose **Add reminder**. This prepares a separate reminder with the note's title and requires you to choose a date/time and confirm. The original note stays unchanged. The two records are independent: edits/deletions do not synchronize between them.
+
+Local search uses normalized English keywords, Chinese bigrams, and a small set of bilingual topic synonyms. It ranks matches and pages results in groups of 50; it is not a universal semantic search engine. When AI assistance is configured, an initially unchecked **Use AI to understand this search** option can expand the query with related terms. Only the search phrase is sent to the user's provider, with best-effort account-number redaction; stored note bodies/titles/IDs are never sent. Results always come from the current user's saved notes, not generated answers. Invalid output, rate limits, or provider failures show a notice and fall back to local matching. AI-expanded searches, including pagination/refreshes, can incur provider charges.
+
+Audio uses the same English/Mandarin system speech service as reminders. Review the recognized text and tap Search or Preview; audio never silently saves or searches. Switching capture modes or leaving the page stops active recognition, discards unfinished speech, and ignores late callbacks. Typed unsaved notes are in memory only and are discarded when leaving Notes; there is no offline cache or auto-save. The feature displays matching notes, not spoken answers.
+
+Notes are stored in a separate user-owned `notes` table, without due-date/status/rule fields or reminder rows. All reads, searches, updates, and deletes are account-scoped, including administrator requests. Version checks reject stale edits/deletes from another device. Note text is stored as entered, including long measurements or sensitive details, so only put information here that you intend to retain. Note deletion removes the active record and search text, but existing database backups retain prior snapshots. Notes are not end-to-end encrypted.
+
+Deploy migration **0004** (`alembic upgrade head` / the existing Compose migrate service) before starting the updated API, then deploy the web client and rebuild/sync/reinstall the iPhone client. This migration adds notes without modifying existing items, reminder rules, or delivery history. No new microphone plugin or embedding service is needed.
 
 ### Reminder Import
 
@@ -55,7 +73,7 @@ For **Doubao**, use a public Volcengine Ark API key and a Beijing-region Model I
 
 If the menu appears fixed on OpenAI, check whether server encryption is configured and whether the installed client is current. The provider selector now remains browsable before encryption setup, while entering keys, enabling AI, saving, and testing remain disabled. Claude was previously labeled only "Anthropic". Adding Doubao requires updating the backend as well as the web/iPhone client; no additional database migration beyond `0003` is required.
 
-AI is **off by default**. Enabling it sends new typed input or extracted OCR text to that provider to suggest draft fields. Recognizable account numbers are redacted, but this is best-effort redaction, not anonymization: names, addresses, amounts, or other personal details may remain. Input is limited to the first 12,000 characters. There is no background processing of saved items, chat agent, automatic payment, or AI access to reminder dispatch or other accounts.
+AI is **off by default**. Enabling it sends new reminder input or extracted OCR text to that provider to suggest draft fields. Note capture does not use AI; optional note-search expansion has its own visible opt-in. Recognizable account numbers are redacted, but this is best-effort redaction, not anonymization: names, addresses, amounts, or other personal details may remain. Input is limited to the first 12,000 characters. There is no background processing of saved items, chat agent, automatic payment, or AI access to reminder dispatch or other accounts.
 
 **Allow optional image analysis** makes a separate checkbox available on the capture card. Check it for each import that should send document images to the provider; it resets after the attempt or leaving the page. Images can contain full account details and other sensitive information and are not text-redacted. Mewmo strips metadata and converts images or up to five PDF pages to bounded PNGs (2,000-pixel maximum dimension, 8 MB total base64 payload); PDF conversion requires Poppler. Provider retention policies still apply even though Mewmo discards originals and intermediate files. A provider change invalidates pending image consent.
 
@@ -126,7 +144,7 @@ npm run dev
 
 Open `http://localhost:5173` and sign in as `admin` with the password used to generate the hash. Vite proxies `/api` to FastAPI. The app starts with an empty list, not demo bills.
 
-For an entirely disposable browser preview, `backend/tests/run_e2e.py` starts a SQLite-backed API on port 8000 with username `admin` and the **test-only** password `mewmo-local-test`. It removes its temporary database when stopped. This is not a production mode and does not run a reminder worker.
+For an entirely disposable browser preview, `backend/tests/run_e2e.py` starts a SQLite-backed API on port 8000 with username `admin` and the **test-only** password `mewmo-local-test`. It creates a temporary AI encryption key for settings tests and removes its temporary database when stopped. This is not a production mode and does not run a reminder worker.
 
 ## Accounts and Invitations
 
@@ -287,6 +305,7 @@ Device-level acceptance is recorded so an ordinary retry does not resend to alre
 - The client stores a random installation identifier, not an account password or session token, to detach notifications on sign-out/account switching. Clearing browser storage may lose that identifier; disable the old device registration from Settings. Already accepted/in-flight notifications cannot be recalled, and displayed-notification cleanup is best effort.
 - Account isolation is enforced by the API and worker, including administrator requests. Server/database operators and anyone with backup access can still access stored data; this is not end-to-end encryption.
 - No offline item cache or automatic offline submission is provided; an unavailable server produces an error.
+- Notes retain their full text intentionally; unlike imported bill fields, note measurements and digit sequences are not automatically redacted. No saved notes are sent to the optional search model.
 
 ### Backups
 
@@ -339,6 +358,8 @@ Required regression: with local date `2026-11-06`, `后天9点有医生预约` c
 Before production use, verify physical-device APNs and browser push acceptance, original-file cleanup in the deployed container, a backup restore, and delivery latency with a real reminder. Docker and Apple signing/push credentials are required for those deployment checks.
 
 ### Verification in This Workspace
+
+The notes update passed 291 backend tests, 44 client unit tests, and 108 desktop/iPhone-sized browser tests. Eleven OCR/PostgreSQL integration tests were skipped. Note CRUD, confirmation, account isolation, search, model-query privacy/fallback, optimistic version conflicts, audio cancellation, reminder creation, and narrow layouts are covered. Web builds, Capacitor asset sync, native permission plist validation, lint, and whitespace checks passed. Speech and provider tests use simulated recognition/mocked model responses; real-device audio, live-provider searches, and production deployment were not performed.
 
 The multi-user update passed 91 backend tests (including the isolated PostgreSQL concurrency suite), 9 client unit tests, and 14 desktop/iPhone-sized browser tests. The final client build, Capacitor sync, backend lint, and patch checks passed. Three real-OCR tests remain skipped. This update has not been deployed to production.
 

@@ -10,13 +10,17 @@ export function VoiceInput({
   onReset,
   onBusy,
   children,
+  triggerLabel = "Add a reminder by audio",
+  unavailableLabel = "Speech recognition is unavailable here. Use keyboard dictation or type your reminder.",
 }: {
   disabled: boolean;
   aiEnabled: boolean;
   onText: (text: string) => void;
   onReset: () => void;
   onBusy: (busy: boolean) => void;
-  children: ReactNode;
+  children?: ReactNode;
+  triggerLabel?: string;
+  unavailableLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [language, setLanguage] = useState(getLocale());
@@ -119,17 +123,13 @@ export function VoiceInput({
             setOpen(true);
           }}
         >
-          <Mic size={15} /> {t("Add a reminder by audio")}
+          <Mic size={15} /> {t(triggerLabel)}
         </button>
       </div>
       {open && (
         <section className="voice-panel" aria-label={t("Voice input")}>
           {!supportsSpeech() ? (
-            <p role="status">
-              {t(
-                "Speech recognition is unavailable here. Use keyboard dictation or type your reminder.",
-              )}
-            </p>
+            <p role="status">{t(unavailableLabel)}</p>
           ) : (
             <>
               {!active && (

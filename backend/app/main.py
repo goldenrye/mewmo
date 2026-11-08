@@ -22,6 +22,7 @@ from .database import session
 from .file_reminders import parse_file
 from .model_settings import router as model_settings_router
 from .models import Delivery, Device, Item, ModelPreference, Reminder, User, now
+from .notes import router as notes_router
 from .parsing import ParseFailure, extract_file, parse_text
 from .push import valid_web_endpoint
 from .reminders import reconcile
@@ -423,3 +424,4 @@ def disable_device(device_id: str, db: Session = Depends(session), user: User = 
 app.include_router(router)
 app.include_router(accounts_router)
 app.include_router(model_settings_router)
+app.include_router(notes_router)

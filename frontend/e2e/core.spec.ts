@@ -179,7 +179,7 @@ test("calendar and settings work without horizontal overflow", async ({
     .filter({ hasText: "Privacy & preferences" })
     .click();
   await expect(
-    page.getByText("Keyboard dictation", { exact: true }),
+    page.getByText("System speech recognition", { exact: true }),
   ).toBeVisible();
   expect(
     await page.evaluate(
