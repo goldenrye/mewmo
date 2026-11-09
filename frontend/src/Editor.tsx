@@ -11,6 +11,12 @@ import {
 } from "lucide-react";
 import { api } from "./api";
 import {
+  alarmEpoch,
+  alarmSnapshot,
+  authorizeAlarms,
+  syncAlarms,
+} from "./alarms";
+import {
   context,
   defaults,
   fullDate,
@@ -76,9 +82,17 @@ export function Editor({
   );
   async function save(event: React.FormEvent) {
     event.preventDefault();
+    const epoch = alarmEpoch();
     setBusy(true);
     setError("");
     try {
+      if (
+        value.urgent &&
+        value.status === "open" &&
+        (!draft.urgent || alarmSnapshot().enabled)
+      ) {
+        await authorizeAlarms();
+      }
       const item = await api<Item>(itemId ? `/items/${itemId}` : "/items", {
         method: itemId ? "PUT" : "POST",
         body: JSON.stringify({
@@ -92,6 +106,10 @@ export function Editor({
           account_last4: value.account_last4 || null,
         }),
       });
+      // The record is already saved even if native scheduling fails. Do not submit it twice.
+      await syncAlarms([item], { force: true, expectedEpoch: epoch }).catch(
+        () => {},
+      );
       onSaved(item);
     } catch (error) {
       setError((error as Error).message);
@@ -263,6 +281,30 @@ export function Editor({
             <span>{value.timezone}</span>
           </div>
         </div>
+        <label className="checkbox-label">
+          <input
+            type="checkbox"
+            checked={value.urgent === true}
+            onChange={(event) => field("urgent", event.target.checked)}
+          />
+          {t("Urgent alarm")}
+        </label>
+        {value.urgent && (
+          <div className="notice urgent-help">
+            <div>
+              <p>
+                {t(
+                  "One alarm at the due time. Sounds through Silent mode and Focus; iPhone controls the volume.",
+                )}
+              </p>
+              <p>
+                {t(
+                  "Requires iOS 26+, alarm permission, and confirmation that this iPhone scheduled it. Web and older iPhones use ordinary notifications only.",
+                )}
+              </p>
+            </div>
+          </div>
+        )}
         <details
           className="disclosure"
           open={

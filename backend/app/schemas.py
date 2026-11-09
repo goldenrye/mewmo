@@ -86,6 +86,7 @@ class Draft(Context):
     rules: list[ReminderRule] = Field(default_factory=list)
     source: Literal["text", "file", "manual"] = "text"
     interpretation: Literal["local", "ai"] = "local"
+    urgent: Literal[False] = False
 
 
 class ItemInput(Context):
@@ -99,6 +100,7 @@ class ItemInput(Context):
     due_date: date
     due_time: str = Field(pattern=r"^(?:[01]\d|2[0-3]):[0-5]\d$")
     status: State = "open"
+    urgent: bool = Field(default=False, strict=True)
     rules: list[ReminderRule] | None = Field(default=None, max_length=20)
 
     @field_validator("title", "payee")

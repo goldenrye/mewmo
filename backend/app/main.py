@@ -26,7 +26,7 @@ from .models import Delivery, Device, Item, ModelPreference, Reminder, User, now
 from .notes import router as notes_router
 from .parsing import ParseFailure, extract_file, parse_text
 from .push import valid_web_endpoint
-from .reminders import reconcile
+from .reminders import notification_title, reconcile
 from .schemas import Draft, ItemInput, ParseRequest, StateInput, default_rules
 
 app = FastAPI(title="Mewmo")
@@ -108,12 +108,18 @@ def item_json(item: Item) -> dict:
             "account_last4",
             "timezone",
             "status",
+            "urgent",
             "rules",
             "created_at",
             "updated_at",
             "finished_at",
         )
-    } | {"due_at": item.due_at, "due_date": local.date(), "due_time": local.strftime("%H:%M")}
+    } | {
+        "due_at": item.due_at,
+        "due_date": local.date(),
+        "due_time": local.strftime("%H:%M"),
+        "alarm_title": notification_title(item),
+    }
 
 
 def locked_item(db: Session, item_id: str, user_id: str) -> Item:
@@ -263,6 +269,9 @@ def items(history: bool = False, db: Session = Depends(session), user: User = De
 def apply_input(item: Item, body: ItemInput):
     for field in ("kind", "title", "payee", "amount", "currency", "account_last4", "timezone", "status"):
         setattr(item, field, getattr(body, field))
+    # Older clients must not silently disable an explicitly enabled urgent alarm.
+    if item.id is None or "urgent" in body.model_fields_set:
+        item.urgent = body.urgent
     item.due_at = body.due_at()
     item.rules = [
         r.model_dump() for r in (body.rules if body.rules is not None else default_rules(body.kind))
@@ -279,6 +288,11 @@ def create_item(body: ItemInput, db: Session = Depends(session), user: User = De
     reconcile(db, item)
     db.commit()
     return item_json(item)
+
+
+@router.get("/items/{item_id}")
+def get_item(item_id: str, db: Session = Depends(session), user: User = Depends(require_user)):
+    return item_json(locked_item(db, item_id, user.id))
 
 
 @router.put("/items/{item_id}")

@@ -2,4 +2,5 @@
 "NSPhotoLibraryUsageDescription" = "选择账单或提醒图片以生成草稿。";
 "NSFaceIDUsageDescription" = "使用面容 ID 在此 iPhone 上安全登录你的 Mewmo 账户。";
 "NSMicrophoneUsageDescription" = "说出提醒、笔记或笔记搜索内容，在保存或搜索前核对文字。Mewmo 不保存录音。";
+"NSAlarmKitUsageDescription" = "允许你选择的紧急提醒在此 iPhone 上以闹钟响铃，不受静音和专注模式影响。";
 "NSSpeechRecognitionUsageDescription" = "将口述提醒、笔记和搜索内容转换为文字。Apple 可能在线处理音频，继续前可核对文字。";

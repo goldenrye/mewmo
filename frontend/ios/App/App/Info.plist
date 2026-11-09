@@ -32,6 +32,8 @@
         <string>Choose a bill or reminder image to prepare a draft.</string>
         <key>NSFaceIDUsageDescription</key>
         <string>Use Face ID to securely sign in to your Mewmo account on this iPhone.</string>
+        <key>NSAlarmKitUsageDescription</key>
+        <string>Allow urgent reminders you choose to sound as alarms through Silent mode and Focus on this iPhone.</string>
         <key>NSMicrophoneUsageDescription</key>
         <string>Speak a reminder, note, or note search. Review the text before saving or searching. Mewmo does not store recordings.</string>
         <key>NSSpeechRecognitionUsageDescription</key>

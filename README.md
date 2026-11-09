@@ -307,6 +307,33 @@ Payment, completion, editing, deletion, and sending serialize on the item row. U
 
 Device-level acceptance is recorded so an ordinary retry does not resend to already accepted devices. Delivery is **at least once**, not exactly once: a crash after external acceptance but before transaction commit can cause a retry. Provider acceptance also does not guarantee the phone displayed or the owner read the notification. These limitations are shown in the delivery UI.
 
+### Urgent iPhone Alarms
+
+In a reminder's review/edit form, enable **Urgent alarm**, then confirm the item. It is **off by default**, including AI/file/audio drafts; neither parsing nor AI can turn it on. On **iOS 26+**, the updated native app uses Apple's AlarmKit to schedule one local alarm at the confirmed due time. Alarm access requires separate system permission. If permission is denied while enabling urgency, the draft stays unsaved: allow access in iPhone Settings or turn off Urgent alarm.
+
+AlarmKit alarms sound through Silent mode and Focus, but **iOS controls their volume**; Mewmo cannot force maximum volume. This is a fixed-date alarm, not a continuously displayed countdown. Countdown input still rounds up to the next whole minute as described above. Do not use Mewmo as your only protection for gas, fire, medication, or other safety-critical situations.
+
+After saving, check the item's **Urgent alarm** status for **Alarm scheduled on this iPhone**. Native scheduling happens only after the server saves the item. A failed alarm schedule does not undo that save or require creating another item; **Schedule alarm** retries using the latest saved item. Native status is separate from push delivery and does not prove the alarm was heard. Dismissing an alarm does not complete the reminder; an unchanged dismissed alarm is not recreated by routine refresh. Explicit scheduling can restore a removed future alarm.
+
+**Notifications > Urgent alarms** enables or disables alarms on this iPhone. Disabling cancels local alarms without clearing items' urgent flags. Completion, deletion, turning urgency off, or changing a due time updates local alarms after a successful sync; undo only restores future alarms. Sign-out and account switching cancel local alarms. A cleanup error is shown explicitly because old alarms may still ring; retry after resolving the error. Native storage keeps the account/server binding, IDs, due times, and fingerprints; the OS-managed alarm contains the same amount-redacted title used for push.
+
+Web and older-iPhone clients use **ordinary notifications only**. A web-created urgent reminder becomes a local iPhone alarm only after that phone signs in and syncs with alarm access enabled. Each enabled iPhone schedules independently. Changes made elsewhere, including completion or deletion, cannot instantly recall an offline phone's alarm: open Mewmo on that phone and sync. Once scheduled, the local alarm does not depend on the server worker or APNs connection.
+
+Existing push rules remain active. Urgent items also receive an ordinary at-due-time push fallback when no configured rule already fires then; this does not alter the saved rule list. Alarm and push can both alert. The fallback cannot bypass Silent mode and follows normal worker/retry timing. No Critical Alerts entitlement, new APNs key, or APNs configuration change is required.
+
+**Deployment:** back up Mewmo, stop the old API/worker, and run migration **0007** through `alembic upgrade head` or the existing Compose migrate service before starting the updated backend. Existing items default to non-urgent; older clients omitting the field preserve a previously saved preference. Deploy the web client, then build/sync/reinstall the native app with an AlarmKit-capable Xcode SDK. Updating the website alone cannot install the plugin or its English/Chinese `NSAlarmKitUsageDescription`. Older supported iOS versions remain installable but cannot use AlarmKit.
+
+Before relying on a release, test on a physical iOS 26+ iPhone:
+
+- Grant and deny alarm permission; verify default-off drafts and cancellation without saving.
+- Schedule a harmless near-future reminder, verify scheduled status, lock the phone, and test with Silent mode and Focus enabled, including with Mewmo backgrounded or terminated.
+- Check actual volume and stop behavior; verify stopping leaves the item open and routine sync does not recreate a dismissed alarm.
+- Edit, complete, undo, delete, disable device alarms, sign out, and switch accounts; verify old alarms are cancelled and future replacements are correct.
+- Change an item from the web while the phone is offline, then reopen/sync; verify the documented stale-alarm limitation and subsequent cancellation.
+- Test revoked permission, native scheduling failure/limits, older iOS, and ordinary push fallback independently.
+
+Automated browser tests mock the native bridge and cannot validate system sound, permission sheets, or locked-screen AlarmKit behavior.
+
 ## Privacy and Operations
 
 - Imported bytes remain in a bounded request buffer and temporary OCR directory. Files and OCR intermediates are deleted on success/failure; production `/tmp` is tmpfs. Nginx request buffering is disabled.

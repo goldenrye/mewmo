@@ -30,7 +30,19 @@ import {
   Upload,
   X,
 } from "lucide-react";
-import { api, currentSession, setToken } from "./api";
+import { api, apiBase, currentSession, setToken } from "./api";
+import {
+  alarmEpoch,
+  alarmRevision,
+  bindAlarmAccount,
+  disableAlarms,
+  syncAlarms,
+} from "./alarms";
+import {
+  AlarmCleanupWarning,
+  UrgentAlarmDetails,
+  UrgentAlarmSettings,
+} from "./UrgentAlarms";
 import {
   biometricStatus,
   clearBiometrics,
@@ -291,12 +303,14 @@ function Login({
 
 function ItemDetail({
   item,
+  onUpdated,
   onClose,
   onEdit,
   onState,
   onDelete,
 }: {
   item: Item;
+  onUpdated: (item: Item) => void;
   onClose: () => void;
   onEdit: () => void;
   onState: (item: Item) => Promise<void>;
@@ -404,6 +418,9 @@ function ItemDetail({
         </button>
       </div>
       <section className="delivery-list">
+        {item.urgent && (
+          <UrgentAlarmDetails item={item} onUpdated={onUpdated} />
+        )}
         <div className="section-heading">
           <h3>
             <Bell size={17} />
@@ -511,6 +528,7 @@ export default function App() {
   }
   const clearAccount = useCallback(() => {
     setToken(null);
+    void bindAlarmAccount(null).catch(() => {});
     setAccount(null);
     void clearBiometrics().catch(() => {});
     void clearDisplayedNotifications();
@@ -566,17 +584,21 @@ export default function App() {
   }
   if (!account) {
     return (
-      <Login
-        key={invitation || "login"}
-        invitation={invitation}
-        onLogin={(result) => {
-          setToken(result.token, result.user.id);
-          setInvitation("");
-          setAccount(result);
-          void clearDisplayedNotifications();
-          notifyOtherTabs();
-        }}
-      />
+      <>
+        <AlarmCleanupWarning />
+        <Login
+          key={invitation || "login"}
+          invitation={invitation}
+          onLogin={(result) => {
+            setToken(result.token, result.user.id);
+            void bindAlarmAccount(result.user.id, apiBase).catch(() => {});
+            setInvitation("");
+            setAccount(result);
+            void clearDisplayedNotifications();
+            notifyOtherTabs();
+          }}
+        />
+      </>
     );
   }
   return (
@@ -584,6 +606,7 @@ export default function App() {
       key={account.user.id}
       account={account}
       onSignOut={async () => {
+        await disableAlarms();
         await clearBiometrics();
         await api("/auth/logout", { method: "POST" });
         clearAccount();
@@ -652,6 +675,7 @@ function Workspace({
     };
   }, [page]);
   const refresh = useCallback(async () => {
+    const revision = alarmRevision();
     const [open, history, registered] = await Promise.all([
       api<Item[]>("/items"),
       api<Item[]>("/items?history=true"),
@@ -660,6 +684,10 @@ function Workspace({
     setItems(open);
     setFinished(history);
     setDevices(registered);
+    await syncAlarms(open, {
+      complete: true,
+      expectedRevision: revision,
+    }).catch(() => {});
   }, []);
   useEffect(() => {
     setLoading(true);
@@ -670,7 +698,16 @@ function Workspace({
       setClock(Date.now());
       void refresh().catch((e) => setError(e.message));
     }, 60000);
-    return () => clearInterval(timer);
+    const resume = () => {
+      if (!document.hidden) void refresh().catch((e) => setError(e.message));
+    };
+    document.addEventListener("visibilitychange", resume);
+    window.addEventListener("focus", resume);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", resume);
+      window.removeEventListener("focus", resume);
+    };
   }, [refresh]);
   useEffect(() => {
     const id = new URLSearchParams(location.search).get("item");
@@ -762,10 +799,11 @@ function Workspace({
     }
   }
   async function changeState(item: Item, undo = false) {
+    const epoch = alarmEpoch();
     setWorking(item.id);
     setError("");
     try {
-      await api(`/items/${item.id}/state`, {
+      const updated = await api<Item>(`/items/${item.id}/state`, {
         method: "POST",
         body: JSON.stringify({
           status:
@@ -776,6 +814,9 @@ function Workspace({
                 : "completed",
         }),
       });
+      await syncAlarms([updated], { force: true, expectedEpoch: epoch }).catch(
+        () => {},
+      );
       setSelected(null);
       setToast({
         message:
@@ -1000,6 +1041,7 @@ function Workspace({
           </div>
         </header>
         <main>
+          <AlarmCleanupWarning />
           <div className="page-heading">
             <div>
               <h1>{t(page[0].toUpperCase() + page.slice(1))}</h1>
@@ -1308,6 +1350,11 @@ function Workspace({
                               </span>
                               <span className="item-text">
                                 <strong>{item.title}</strong>
+                                {item.urgent && (
+                                  <small className="urgent-badge">
+                                    {t("Urgent")}
+                                  </small>
+                                )}
                                 <span className={late ? "late-text" : ""}>
                                   {new Date(item.due_at).toLocaleDateString(
                                     getLocale(),
@@ -1398,6 +1445,7 @@ function Workspace({
           )}
           {page === "notifications" && (
             <div className="settings-grid">
+              <UrgentAlarmSettings onEnabled={refresh} />
               <section className="settings-card">
                 <h2>{t("Remind me on this device")}</h2>
                 <p className="muted">
@@ -1554,8 +1602,9 @@ function Workspace({
             setDraft(null);
             setEditId(undefined);
           }}
-          onSaved={() => {
+          onSaved={(item) => {
             setDraft(null);
+            if (item.urgent) setSelected(item);
             setEditId(undefined);
             setText("");
             setToast({
@@ -1569,6 +1618,7 @@ function Workspace({
         <ItemDetail
           key={selected.id}
           item={selected}
+          onUpdated={setSelected}
           onClose={() => setSelected(null)}
           onEdit={() => {
             setEditId(selected.id);
@@ -1583,7 +1633,11 @@ function Workspace({
           }}
           onState={changeState}
           onDelete={async () => {
+            const epoch = alarmEpoch();
             await api(`/items/${selected.id}`, { method: "DELETE" });
+            await syncAlarms([{ ...selected, urgent: false }], {
+              expectedEpoch: epoch,
+            }).catch(() => {});
             setSelected(null);
             setToast({
               message: t("Item deleted. Unsent reminders cancelled."),

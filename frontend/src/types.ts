@@ -25,6 +25,7 @@ export type Draft = {
   duplicates: string[];
   source: "manual" | "text" | "file";
   interpretation?: "local" | "ai";
+  urgent?: boolean;
 };
 export type Item = Omit<
   Draft,
@@ -32,6 +33,7 @@ export type Item = Omit<
 > & {
   id: string;
   due_at: string;
+  alarm_title?: string;
   created_at: string;
   finished_at: string | null;
 };
@@ -143,6 +145,7 @@ export function manualDraft(kind: Kind = "bill"): Draft {
     due_time: "09:00",
     timezone: context().timezone,
     status: "open",
+    urgent: false,
     rules: defaults(kind),
     uncertain: [],
     warnings: [],

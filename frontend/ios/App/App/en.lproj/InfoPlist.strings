@@ -2,4 +2,5 @@
 "NSPhotoLibraryUsageDescription" = "Choose a bill or reminder image to prepare a draft.";
 "NSFaceIDUsageDescription" = "Use Face ID to securely sign in to your Mewmo account on this iPhone.";
 "NSMicrophoneUsageDescription" = "Speak a reminder, note, or note search. Review the text before saving or searching. Mewmo does not store recordings.";
+"NSAlarmKitUsageDescription" = "Allow urgent reminders you choose to sound as alarms through Silent mode and Focus on this iPhone.";
 "NSSpeechRecognitionUsageDescription" = "Turn spoken reminders, notes, and searches into text. Apple may process audio online. You review the text before continuing.";

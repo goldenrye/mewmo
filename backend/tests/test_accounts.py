@@ -102,6 +102,7 @@ def test_private_items_history_mutations_reminders_and_duplicates(client, bill_i
     assert client.get("/api/items?history=true").json() == []
     for row in (item, history):
         path = f"/api/items/{row['id']}"
+        assert client.get(path).status_code == 404
         assert client.get(path + "/reminders").status_code == 404
         assert client.put(path, json=bill_input).status_code == 404
         assert client.post(path + "/state", json={"status": "paid"}).status_code == 404
@@ -114,8 +115,10 @@ def test_private_items_history_mutations_reminders_and_duplicates(client, bill_i
     assert draft["duplicates"] == []
     own = client.post("/api/items", json=bill_input | {"user_id": ADMIN_ID}).json()
     assert db.get(Item, own["id"]).user_id == member["id"]
+    assert client.get(f"/api/items/{own['id']}").json()["id"] == own["id"]
     login_admin(client)
     assert [row["id"] for row in client.get("/api/items").json()] == [item["id"]]
+    assert client.get(f"/api/items/{own['id']}").status_code == 404
     assert client.get(f"/api/items/{own['id']}/reminders").status_code == 404
     assert client.delete(f"/api/items/{own['id']}").status_code == 404
 

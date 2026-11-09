@@ -99,6 +99,7 @@ class Item(Base):
     due_at: Mapped[datetime] = mapped_column(UTCDateTime)
     timezone: Mapped[str] = mapped_column(String(80))
     status: Mapped[str] = mapped_column(String(20), default="open")
+    urgent: Mapped[bool] = mapped_column(default=False, server_default="false")
     rules: Mapped[list] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now)
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now, onupdate=now)

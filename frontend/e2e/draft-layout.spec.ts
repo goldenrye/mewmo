@@ -59,43 +59,53 @@ for (const language of ["en", "zh-CN"]) {
     await expect(dialog.locator(".date-preview")).toContainText("2026");
     await expect(dialog.locator(".date-preview")).toContainText("09:00");
     await dialog.locator(".rules summary").click();
-    for (const width of [320, 390, 520, 768]) {
-      await page.setViewportSize({ width, height: 850 });
-      await expect
-        .poll(
-          () =>
-            dialog.evaluate((root) => {
-              const controls = Array.from(
-                root.querySelectorAll<HTMLElement>(
-                  "input:not([type=checkbox]), select, .rule-row button",
-                ),
-              ).filter((node) => node.getClientRects().length);
-              const bad: string[] = [];
-              for (const [index, control] of controls.entries()) {
-                const a = control.getBoundingClientRect();
-                const parent = control.parentElement!.getBoundingClientRect();
-                if (a.left < parent.left - 1 || a.right > parent.right + 1)
-                  bad.push(
-                    `Overflow: ${control.getAttribute("aria-label") || control.outerHTML}`,
-                  );
-                for (const other of controls.slice(index + 1)) {
-                  const b = other.getBoundingClientRect();
-                  if (
-                    Math.min(a.right, b.right) - Math.max(a.left, b.left) > 1 &&
-                    Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 1
-                  )
+    for (const showAccount of [false, true]) {
+      if (showAccount)
+        await dialog.locator("details").first().locator("summary").click();
+      for (const width of [320, 390, 520, 768]) {
+        await page.setViewportSize({ width, height: 850 });
+        await expect
+          .poll(
+            () =>
+              dialog.evaluate((root) => {
+                const controls = Array.from(
+                  root.querySelectorAll<HTMLElement>(
+                    "input:not([type=checkbox]), select, .rule-row button",
+                  ),
+                ).filter(
+                  // Closed details can retain rectangles for controls that are not painted.
+                  (node) =>
+                    node.getClientRects().length &&
+                    !node.closest("details:not([open])"),
+                );
+                const bad: string[] = [];
+                for (const [index, control] of controls.entries()) {
+                  const a = control.getBoundingClientRect();
+                  const parent = control.parentElement!.getBoundingClientRect();
+                  if (a.left < parent.left - 1 || a.right > parent.right + 1)
                     bad.push(
-                      `Overlapping controls: ${control.outerHTML} / ${other.outerHTML}`,
+                      `Overflow: ${control.getAttribute("aria-label") || control.outerHTML}`,
                     );
+                  for (const other of controls.slice(index + 1)) {
+                    const b = other.getBoundingClientRect();
+                    if (
+                      Math.min(a.right, b.right) - Math.max(a.left, b.left) >
+                        1 &&
+                      Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 1
+                    )
+                      bad.push(
+                        `Overlapping controls: ${control.outerHTML} / ${other.outerHTML}`,
+                      );
+                  }
                 }
-              }
-              if (root.scrollWidth > root.clientWidth)
-                bad.push("Dialog overflow");
-              return bad;
-            }),
-          { message: `width ${width}` },
-        )
-        .toEqual([]);
+                if (root.scrollWidth > root.clientWidth)
+                  bad.push("Dialog overflow");
+                return bad;
+              }),
+            { message: `width ${width}` },
+          )
+          .toEqual([]);
+      }
     }
     await notes.locator("summary").click();
     await expect(notes.locator("p")).toHaveCount(2);

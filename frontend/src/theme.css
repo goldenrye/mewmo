@@ -323,6 +323,27 @@ dialog::backdrop {
   border-radius: 14px;
   background: var(--surface);
 }
+.urgent-badge {
+  display: inline-block;
+  width: fit-content;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--accent-soft);
+  color: var(--accent-hover);
+}
+.urgent-alarm p,
+.urgent-help p {
+  overflow-wrap: anywhere;
+}
+.urgent-help p {
+  margin: 0 0 8px;
+}
+.urgent-help p:last-child {
+  margin-bottom: 0;
+}
+.urgent-alarm button {
+  white-space: normal;
+}
 .voice-panel p {
   margin: 0 0 12px;
 }

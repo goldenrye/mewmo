@@ -169,5 +169,6 @@ class MewmoBridgeViewController: CAPBridgeViewController {
     override func capacitorDidLoad() {
         bridge?.registerPluginInstance(BiometricSessionPlugin())
         bridge?.registerPluginInstance(SpeechPlugin())
+        bridge?.registerPluginInstance(UrgentAlarmPlugin())
     }
 }

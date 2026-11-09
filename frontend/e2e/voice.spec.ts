@@ -237,6 +237,7 @@ test("navigation stops recognition and narrow controls remain usable", async ({
   await expect(page.locator(".voice-panel textarea")).toHaveCount(0);
   const audioButton = page.getByRole("button", {
     name: "Voice input",
+    exact: true,
   });
   const importButton = page.getByRole("button", { name: "Import reminder" });
   expect(

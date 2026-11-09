@@ -34,8 +34,10 @@ def reconcile(db: Session, item: Item, at: datetime | None = None):
             row.error = None
     if item.status != "open":
         return
-    for raw in item.rules:
-        rule = ReminderRule.model_validate(raw)
+    rules = [ReminderRule.model_validate(raw) for raw in item.rules]
+    if item.urgent and not any(fire_time(item, rule) == item.due_at for rule in rules):
+        rules.append(ReminderRule(minutes=0))
+    for rule in rules:
         fire = fire_time(item, rule)
         if fire <= at:
             continue
@@ -48,8 +50,7 @@ def reconcile(db: Session, item: Item, at: datetime | None = None):
             row.error = None
 
 
-def notification_payload(item: Item, reminder: Reminder) -> dict:
-    local = item.due_at.astimezone(ZoneInfo(item.timezone))
+def notification_title(item: Item) -> str:
     # Amount and account fields deliberately never enter the push payload.
     from .parsing import MONEY
 
@@ -61,9 +62,13 @@ def notification_payload(item: Item, reminder: Reminder) -> dict:
             lambda m: "" if Decimal(m[0].replace(",", "")) == item.amount else m[0],
             title,
         )
-    title = re.sub(r"\s+", " ", title).strip() or "Your bill reminder"
+    return re.sub(r"\s+", " ", title).strip() or "Your bill reminder"
+
+
+def notification_payload(item: Item, reminder: Reminder) -> dict:
+    local = item.due_at.astimezone(ZoneInfo(item.timezone))
     return {
-        "title": title,
+        "title": notification_title(item),
         "body": local.strftime("%A, %Y-%m-%d at %H:%M") + f" ({item.timezone})",
         "item_id": item.id,
         "reminder_id": reminder.id,
