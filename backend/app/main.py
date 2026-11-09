@@ -20,6 +20,7 @@ from .auth import client_key_hash, require_user
 from .config import settings
 from .database import session
 from .file_reminders import parse_file
+from .model_settings import image_chain_token
 from .model_settings import router as model_settings_router
 from .models import Delivery, Device, Item, ModelPreference, Reminder, User, now
 from .notes import router as notes_router
@@ -169,6 +170,8 @@ async def file_draft(
     timezone: str,
     use_image_ai: bool = False,
     image_provider: str | None = None,
+    image_revision: int | None = None,
+    image_chain: str | None = None,
     db: Session = Depends(session),
     user: User = Depends(require_user),
 ):
@@ -188,6 +191,12 @@ async def file_draft(
         if use_image_ai and not (preference and preference.enabled and preference.allow_images):
             raise HTTPException(400, "Enable image analysis in AI settings before using it for an import.")
         if use_image_ai and image_provider != preference.provider:
+            raise HTTPException(400, "AI settings changed. Review them and opt in to image analysis again.")
+        if use_image_ai and (
+            (preference.fallbacks and image_chain != image_chain_token(preference))
+            or (image_chain is not None and image_chain != image_chain_token(preference))
+            or (image_revision is not None and image_revision != preference.revision)
+        ):
             raise HTTPException(400, "AI settings changed. Review them and opt in to image analysis again.")
         image_data = bytes(data) if use_image_ai else None
         extracted, draft, failure = "", None, None

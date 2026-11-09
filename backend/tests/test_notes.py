@@ -268,7 +268,7 @@ def test_note_migration_preserves_existing_items(tmp_path, monkeypatch):
         config.attributes["connection"] = connection
         command.upgrade(config, "0003")
         tables = set(inspect(connection).get_table_names())
-        command.upgrade(config, "head")
+        command.upgrade(config, "0004")
         assert set(inspect(connection).get_table_names()) == tables | {"notes"}
     with Session(engine) as db:
         user = db.scalar(select(User))

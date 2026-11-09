@@ -2,8 +2,8 @@ import uuid
 from datetime import UTC, datetime
 from decimal import Decimal
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Index, Numeric, String, Text, UniqueConstraint
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy import JSON, BigInteger, DateTime, ForeignKey, Index, Numeric, String, Text, UniqueConstraint
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.types import TypeDecorator
 
 
@@ -67,6 +67,23 @@ class ModelPreference(Base):
     enabled: Mapped[bool] = mapped_column(default=False)
     allow_images: Mapped[bool] = mapped_column(default=False)
     allow_note_search: Mapped[bool] = mapped_column(default=False)
+    revision: Mapped[int] = mapped_column(BigInteger, default=1)
+    fallbacks: Mapped[list["ModelFallback"]] = relationship(
+        cascade="all, delete-orphan", order_by="ModelFallback.position", lazy="selectin"
+    )
+
+
+class ModelFallback(Base):
+    __tablename__ = "model_fallbacks"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("model_preferences.user_id", ondelete="CASCADE"), index=True
+    )
+    position: Mapped[int] = mapped_column()
+    provider: Mapped[str] = mapped_column(String(20))
+    model: Mapped[str] = mapped_column(String(120))
+    encrypted_key: Mapped[str] = mapped_column(Text)
+    __table_args__ = (UniqueConstraint("user_id", "position", name="uq_model_fallback_position"),)
 
 
 class Item(Base):

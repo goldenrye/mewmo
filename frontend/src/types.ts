@@ -80,6 +80,15 @@ export type ModelSettings = {
   enabled: boolean;
   allow_images: boolean;
   allow_note_search: boolean;
+  revision?: number;
+  image_chain_token?: string | null;
+  models?: AIModel[];
+};
+export type AIModel = {
+  id: string;
+  provider: ModelSettings["provider"];
+  model: string;
+  has_key: boolean;
 };
 export type Invitation = {
   id: string;

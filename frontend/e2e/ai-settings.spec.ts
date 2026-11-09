@@ -9,6 +9,7 @@ const empty: ModelSettings = {
   enabled: false,
   allow_images: false,
   allow_note_search: true,
+  revision: 0,
 };
 const secret = "fake-test-api-key-not-a-real-secret";
 
@@ -34,40 +35,52 @@ async function openSettings(page: Page) {
 async function mockSettings(page: Page, initial = empty, testFails = false) {
   let saved = { ...initial };
   const writes: Record<string, unknown>[] = [];
-  await page.route(/\/api\/model-settings(?:\/test)?$/, async (route) => {
-    const request = route.request();
-    if (request.url().endsWith("/test")) {
-      await route.fulfill({
-        status: testFails ? 400 : 200,
-        json: testFails
-          ? {
-              detail:
-                "Could not connect to the model. Check the provider, model ID, API key, and available credit.",
-            }
-          : { ok: true },
-      });
-      return;
-    }
-    if (request.method() === "PUT") {
-      const body = request.postDataJSON();
-      writes.push(body);
-      saved = {
-        available: true,
-        provider: body.provider,
-        model: body.model,
-        has_key: true,
-        enabled: body.enabled,
-        allow_images: body.allow_images,
-        allow_note_search: body.allow_note_search,
-      };
-    }
-    if (request.method() === "DELETE") {
-      saved = { ...empty };
-      await route.fulfill({ status: 204 });
-      return;
-    }
-    await route.fulfill({ json: saved });
-  });
+  await page.route(
+    /\/api\/model-settings(?:\/models|\/test)?(?:\?.*)?$/,
+    async (route) => {
+      const request = route.request();
+      if (new URL(request.url()).pathname.endsWith("/test")) {
+        await route.fulfill({
+          status: testFails ? 400 : 200,
+          json: testFails
+            ? {
+                detail:
+                  "Could not connect to the model. Check the provider, model ID, API key, and available credit.",
+              }
+            : { ok: true },
+        });
+        return;
+      }
+      if (request.method() === "PUT") {
+        const body = request.postDataJSON();
+        writes.push(body);
+        saved = {
+          available: true,
+          provider: body.models[0].provider,
+          model: body.models[0].model,
+          models: body.models.map(
+            (entry: { provider: string; model: string }, index: number) => ({
+              id: index === 0 ? "primary" : `fallback-${index}`,
+              provider: entry.provider,
+              model: entry.model,
+              has_key: true,
+            }),
+          ),
+          revision: (saved.revision ?? 0) + 1,
+          has_key: true,
+          enabled: body.enabled,
+          allow_images: body.allow_images,
+          allow_note_search: body.allow_note_search,
+        };
+      }
+      if (request.method() === "DELETE") {
+        saved = { ...empty };
+        await route.fulfill({ status: 204 });
+        return;
+      }
+      await route.fulfill({ json: saved });
+    },
+  );
   return writes;
 }
 
@@ -87,8 +100,7 @@ test("configure, test, disable, and remove a private model without displaying it
   await panel.getByRole("button", { name: "Save AI settings" }).click();
   await expect(panel.getByText("AI settings saved.")).toBeVisible();
   expect(writes[0]).toMatchObject({
-    provider: "anthropic",
-    api_key: secret,
+    models: [{ provider: "anthropic", api_key: secret }],
     enabled: true,
     allow_images: true,
     allow_note_search: true,
@@ -103,7 +115,9 @@ test("configure, test, disable, and remove a private model without displaying it
   await expect(panel.getByLabel("Use AI for note search")).toBeDisabled();
   await panel.getByRole("button", { name: "Save AI settings" }).click();
   await expect(panel.getByText("Local parsing only.")).toBeVisible();
-  expect(writes[1].api_key).toBeNull();
+  expect(
+    (writes[1].models as { api_key: string | null }[])[0].api_key,
+  ).toBeNull();
   await panel
     .getByRole("button", { name: "Remove model", exact: true })
     .click();
@@ -304,9 +318,13 @@ test("Doubao can be configured in Chinese with its own key and endpoint ID", asy
   await panel.getByRole("button", { name: "保存 AI 设置" }).click();
   await expect(panel.getByText("AI 设置已保存。")).toBeVisible();
   expect(writes[0]).toMatchObject({
-    provider: "doubao",
-    model: "ep-20261107000000-example",
-    api_key: secret,
+    models: [
+      {
+        provider: "doubao",
+        model: "ep-20261107000000-example",
+        api_key: secret,
+      },
+    ],
     enabled: true,
   });
   await expect(panel.getByLabel("API 密钥", { exact: true })).toHaveValue("");
@@ -336,15 +354,211 @@ test("real settings API persists for a member without making a provider call", a
   await panel.getByLabel("Provider", { exact: true }).selectOption("gemini");
   await panel.getByLabel("Model ID").fill("example-model");
   await panel.getByLabel("API key", { exact: true }).fill(secret);
+  await panel.getByRole("button", { name: "Add model", exact: true }).click();
+  const backup = panel.locator(".model-entry").nth(1);
+  await backup.getByLabel("Model ID").fill("backup-model");
+  await backup.getByLabel("API key", { exact: true }).fill("backup-test-key");
   await panel.getByRole("button", { name: "Save AI settings" }).click();
   await expect(panel.getByText("AI settings saved.")).toBeVisible();
   await page.reload();
   const restored = await openSettings(page);
-  await expect(restored.getByLabel("Provider", { exact: true })).toHaveValue(
+  const primary = restored.locator(".model-entry").nth(0);
+  await expect(primary.getByLabel("Provider", { exact: true })).toHaveValue(
     "gemini",
   );
-  await expect(restored.getByLabel("API key", { exact: true })).toHaveValue("");
+  await expect(primary.getByLabel("API key", { exact: true })).toHaveValue("");
+  await expect(restored.locator(".model-entry")).toHaveCount(2);
   await expect(restored.getByLabel("Enable AI assistance")).not.toBeChecked();
+  await restored
+    .getByRole("button", { name: "Move model 2 up", exact: true })
+    .click();
+  await restored.getByRole("button", { name: "Save AI settings" }).click();
+  await expect(restored.getByText("AI settings saved.")).toBeVisible();
   const settings = await page.request.get("/api/model-settings");
   expect(await settings.text()).not.toContain(secret);
+  expect(
+    (await settings.json()).models.map(
+      (model: { model: string }) => model.model,
+    ),
+  ).toEqual(["backup-model", "example-model"]);
+});
+
+test("models can be added ordered tested and removed without mixing keys", async ({
+  page,
+}) => {
+  const writes = await mockSettings(page);
+  await login(page);
+  const panel = await openSettings(page);
+  let entries = panel.locator(".model-entry");
+  await entries.nth(0).getByLabel("Model ID").fill("first-model");
+  await entries
+    .nth(0)
+    .getByLabel("API key", { exact: true })
+    .fill("first-test-key");
+  await panel.getByRole("button", { name: "Add model", exact: true }).click();
+  await entries
+    .nth(1)
+    .getByLabel("Provider", { exact: true })
+    .selectOption("gemini");
+  await entries.nth(1).getByLabel("Model ID").fill("second-model");
+  await entries
+    .nth(1)
+    .getByLabel("API key", { exact: true })
+    .fill("second-test-key");
+  await panel
+    .getByRole("button", { name: "Move model 2 up", exact: true })
+    .click();
+  await expect(entries.nth(0).getByLabel("Model ID")).toHaveValue(
+    "second-model",
+  );
+  await expect(
+    entries.nth(0).getByText("Default", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    entries.nth(0).getByLabel("API key", { exact: true }),
+  ).toHaveValue("second-test-key");
+  await panel.getByLabel("Enable AI assistance").check();
+  await panel.getByRole("button", { name: "Save AI settings" }).click();
+  await expect(panel.getByText("AI settings saved.")).toBeVisible();
+  expect(writes[0].models).toEqual([
+    { provider: "gemini", model: "second-model", api_key: "second-test-key" },
+    { provider: "openai", model: "first-model", api_key: "first-test-key" },
+  ]);
+  await expect(
+    entries.nth(0).getByLabel("API key", { exact: true }),
+  ).toHaveValue("");
+  await expect(
+    entries.nth(1).getByLabel("API key", { exact: true }),
+  ).toHaveValue("");
+  const tested = page.waitForRequest((request) =>
+    request.url().includes("/model-settings/test?"),
+  );
+  await entries
+    .nth(1)
+    .getByRole("button", { name: "Test saved model" })
+    .click();
+  expect(new URL((await tested).url()).searchParams.get("model_id")).toBe(
+    "fallback-1",
+  );
+  await expect(
+    entries.nth(1).getByText("Connection successful."),
+  ).toBeVisible();
+  await page.reload();
+  await openSettings(page);
+  entries = panel.locator(".model-entry");
+  await expect(entries.nth(0).getByLabel("Model ID")).toHaveValue(
+    "second-model",
+  );
+  await panel
+    .getByRole("button", { name: "Remove model 2", exact: true })
+    .click();
+  expect(writes).toHaveLength(1);
+  await panel.getByRole("button", { name: "Save AI settings" }).click();
+  await expect.poll(() => writes.length).toBe(2);
+  expect(writes[1].models).toEqual([
+    { id: "primary", provider: "gemini", model: "second-model", api_key: null },
+  ]);
+  expect(await page.evaluate(() => JSON.stringify(localStorage))).not.toContain(
+    "test-key",
+  );
+});
+
+test("ordered models fit narrow Chinese and English settings", async ({
+  page,
+}) => {
+  await mockSettings(page);
+  await login(page);
+  const panel = await openSettings(page);
+  for (let i = 0; i < 4; i++)
+    await panel.getByRole("button", { name: "Add model", exact: true }).click();
+  await expect(
+    panel.getByRole("button", { name: "Add model", exact: true }),
+  ).toBeDisabled();
+  await expect(panel.locator(".model-entry")).toHaveCount(5);
+  for (const language of ["en", "zh-CN"]) {
+    await page
+      .getByRole("combobox")
+      .filter({ has: page.locator('option[value="zh-CN"]') })
+      .selectOption(language);
+    for (const width of [320, 390, 768, 1280]) {
+      await page.setViewportSize({ width, height: 844 });
+      await expect
+        .poll(() =>
+          page.evaluate(
+            () => document.documentElement.scrollWidth <= innerWidth,
+          ),
+        )
+        .toBe(true);
+      const failures = await panel
+        .locator(".model-entry")
+        .evaluateAll((entries) =>
+          entries.flatMap((entry) => {
+            const box = entry.getBoundingClientRect();
+            return [...entry.querySelectorAll("input, select, button")]
+              .filter((control) => {
+                const rect = control.getBoundingClientRect();
+                return (
+                  rect.width < 44 ||
+                  rect.x < box.x ||
+                  rect.right > box.right + 1
+                );
+              })
+              .map((control) => control.outerHTML);
+          }),
+        );
+      expect(failures).toEqual([]);
+    }
+  }
+});
+
+test("image consent discloses every fallback and sends the chain token", async ({
+  page,
+}) => {
+  await mockSettings(page, {
+    ...empty,
+    enabled: true,
+    has_key: true,
+    allow_images: true,
+    provider: "openai",
+    model: "first-model",
+    revision: 17,
+    image_chain_token: "test-chain-token",
+    models: [
+      {
+        id: "primary",
+        provider: "openai",
+        model: "first-model",
+        has_key: true,
+      },
+      {
+        id: "fallback",
+        provider: "anthropic",
+        model: "backup-model",
+        has_key: true,
+      },
+    ],
+  });
+  const requests: URL[] = [];
+  await page.route("**/api/drafts/file?**", async (route) => {
+    requests.push(new URL(route.request().url()));
+    await route.fulfill({ status: 422, json: { detail: "Test import" } });
+  });
+  await login(page);
+  const consent = page.getByLabel(
+    "Send document images to my configured AI models for this import",
+  );
+  await expect(consent).not.toBeChecked();
+  await expect(
+    page.getByText(/Tried in order: openai \/ first-model/),
+  ).toContainText("anthropic / backup-model");
+  await consent.check();
+  await page.locator('input[type="file"]').setInputFiles({
+    name: "test.png",
+    mimeType: "image/png",
+    buffer: Buffer.from("test-image"),
+  });
+  await expect.poll(() => requests.length).toBe(1);
+  expect(requests[0].searchParams.get("image_chain")).toBe("test-chain-token");
+  expect(requests[0].searchParams.get("image_revision")).toBe("17");
+  await expect(consent).not.toBeChecked();
 });

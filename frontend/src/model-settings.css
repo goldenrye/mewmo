@@ -1,0 +1,38 @@
+.model-entry {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px;
+  margin: 16px 0;
+  min-width: 0;
+}
+.model-heading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.model-heading h3 {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.model-order {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.model-entry .ai-actions {
+  flex-wrap: wrap;
+}
+.model-entry input,
+.model-entry select {
+  min-width: 0;
+  max-width: 100%;
+}
+.image-model-chain {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}

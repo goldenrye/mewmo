@@ -17,6 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from .accounts import throttle
 from .bill_fields import DATE
+from .model_chain import BACKUP_WARNING, attempt_timeout, try_models
 from .model_provider import ModelUnavailable, request_model
 from .model_settings import decrypt_key
 from .models import ModelPreference
@@ -138,7 +139,6 @@ def assist_draft(
             if not preference.allow_images:
                 raise ModelUnavailable()
             images = image_parts(image_data)
-        key = decrypt_key(preference)
         prompt = json.dumps(
             {
                 "source": draft.source if draft else "file",
@@ -151,12 +151,23 @@ def assist_draft(
         if images and draft:
             # Once a request starts, the provider may receive images even if it times out.
             draft.warnings.append(IMAGE_WARNING)
-        raw = request_model(preference.provider, preference.model, key, SYSTEM, prompt, images)
-        suggestion = Suggestion.model_validate_json(raw)
         file_source = draft is None or draft.source == "file"
-        if file_source:
+
+        def attempt(model):
+            raw = request_model(
+                model.provider,
+                model.model,
+                decrypt_key(model),
+                SYSTEM,
+                prompt,
+                images,
+                timeout=attempt_timeout(preference),
+            )
+            suggestion = Suggestion.model_validate_json(raw)
             kind = suggestion.kind or ("bill" if suggestion.is_bill is True else None)
-            if (
+            if not any(value is not None for value in suggestion.model_dump().values()):
+                raise ModelUnavailable()
+            if file_source and (
                 kind is None
                 or (kind == "bill" and suggestion.is_bill is False)
                 or (kind != "bill" and suggestion.is_bill is True)
@@ -164,6 +175,9 @@ def assist_draft(
                 or (draft is not None and draft.kind != kind)
             ):
                 raise ModelUnavailable()
+            return suggestion, kind
+
+        (suggestion, kind), model_index = try_models(preference, attempt)
         if draft is None:
             draft = Draft(
                 local_date=context.local_date,
@@ -204,6 +218,8 @@ def assist_draft(
             draft.status = "open"
         draft.uncertain = list(dict.fromkeys(draft.uncertain))
         draft.warnings.append(AI_WARNING)
+        if model_index:
+            draft.warnings.append(BACKUP_WARNING)
         return draft
     except (ModelUnavailable, ParseFailure, ValidationError, HTTPException):
         if draft:

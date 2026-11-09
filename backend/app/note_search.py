@@ -9,6 +9,7 @@ from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from .accounts import throttle
+from .model_chain import BACKUP_WARNING, attempt_timeout, try_models
 from .model_provider import ModelUnavailable, request_model
 from .model_settings import decrypt_key
 from .models import ModelPreference
@@ -71,19 +72,27 @@ def search_terms(query: str, preference: ModelPreference | None, use_ai: bool):
     if use_ai and preference and preference.enabled:
         try:
             throttle("model-use:" + preference.user_id, 30)
-            raw = request_model(
-                preference.provider,
-                preference.model,
-                decrypt_key(preference),
-                SYSTEM,
-                json.dumps({"query": redact_accounts(query)}, ensure_ascii=False),
-            )
-            expansion = Expansion.model_validate_json(raw)
+            prompt = json.dumps({"query": redact_accounts(query)}, ensure_ascii=False)
+
+            def attempt(model):
+                raw = request_model(
+                    model.provider,
+                    model.model,
+                    decrypt_key(model),
+                    SYSTEM,
+                    prompt,
+                    timeout=attempt_timeout(preference),
+                )
+                return Expansion.model_validate_json(raw)
+
+            expansion, model_index = try_models(preference, attempt)
             for phrase in expansion.terms:
                 for term in keywords(phrase):
                     if len(weights) < 40:
                         weights.setdefault(term, 1)
             mode = "ai"
+            if model_index:
+                warning = BACKUP_WARNING
         except (ModelUnavailable, ValidationError, HTTPException):
             warning = "AI search was unavailable. Showing local matches."
     return weights, mode, warning

@@ -741,6 +741,10 @@ function Workspace({
       if (imageAI && modelSettings?.enabled && modelSettings.allow_images) {
         query.set("use_image_ai", "true");
         query.set("image_provider", modelSettings.provider);
+        if (modelSettings.revision !== undefined)
+          query.set("image_revision", String(modelSettings.revision));
+        if (modelSettings.image_chain_token)
+          query.set("image_chain", modelSettings.image_chain_token);
       }
       const result = await api<Draft>(`/drafts/file?${query}`, {
         method: "POST",
@@ -1149,7 +1153,9 @@ function Workspace({
                 {modelSettings?.enabled && (
                   <p className="small muted">
                     {t(
-                      "AI-assisted capture is on. New input is sent to your selected provider.",
+                      (modelSettings.models?.length ?? 1) > 1
+                        ? "AI-assisted capture is on. Models are tried in your saved order."
+                        : "AI-assisted capture is on. New input is sent to your selected provider.",
                     )}
                   </p>
                 )}
@@ -1165,7 +1171,21 @@ function Workspace({
                       />
                       <span>
                         {t(
-                          "Send document images to my AI provider for this import",
+                          (modelSettings.models?.length ?? 1) > 1
+                            ? "Send document images to my configured AI models for this import"
+                            : "Send document images to my AI provider for this import",
+                        )}
+                        {(modelSettings.models?.length ?? 0) > 1 && (
+                          <small className="image-model-chain">
+                            {t("Tried in order: {models}", {
+                              models: modelSettings
+                                .models!.map(
+                                  (model) =>
+                                    `${model.provider} / ${model.model}`,
+                                )
+                                .join(" → "),
+                            })}
+                          </small>
                         )}
                       </span>
                     </label>

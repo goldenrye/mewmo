@@ -12,7 +12,9 @@ class ModelUnavailable(ValueError):
     pass
 
 
-def request_model(provider: str, model: str, key: str, system: str, prompt: str, images=()) -> str:
+def request_model(
+    provider: str, model: str, key: str, system: str, prompt: str, images=(), *, timeout=30
+) -> str:
     text = {"type": "text", "text": prompt}
     if provider in ("openai", "doubao"):
         url = (
@@ -77,7 +79,7 @@ def request_model(provider: str, model: str, key: str, system: str, prompt: str,
     try:
         # Avoid environment proxies and redirects leaking the user's API key.
         with httpx.Client(
-            timeout=httpx.Timeout(30, connect=5), trust_env=False, follow_redirects=False
+            timeout=httpx.Timeout(timeout, connect=min(5, timeout)), trust_env=False, follow_redirects=False
         ) as client:
             with client.stream("POST", url, headers=headers, json=body) as response:
                 if response.status_code != 200:
