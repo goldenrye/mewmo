@@ -1,9 +1,12 @@
 import { expect, test, type Page } from "@playwright/test";
+import { holdSpeech } from "./speech-gesture";
 
 type SpeechTest = {
   starts: number;
   aborts: number;
   language: string;
+  deferStart: boolean;
+  begin(): void;
   say(text: string): void;
   fail(): void;
 };
@@ -15,6 +18,10 @@ async function setup(page: Page, language = "en", ai = false) {
       starts: 0,
       aborts: 0,
       language: "",
+      deferStart: false,
+      begin() {
+        active.onstart?.();
+      },
       say(text) {
         active.onresult?.({ results: [[{ transcript: text }]] });
       },
@@ -32,7 +39,7 @@ async function setup(page: Page, language = "en", ai = false) {
         active = this;
         control.starts++;
         control.language = this.lang;
-        this.onstart?.();
+        if (!control.deferStart) this.onstart?.();
       }
       stop() {
         this.onend?.();
@@ -82,7 +89,7 @@ async function navigate(page: Page, name: string) {
   await page
     .getByRole("button", { name, exact: true })
     .filter({ visible: true })
-    .click();
+    .dispatchEvent("click");
 }
 
 test("Chinese speech becomes an editable reminder and saves only after confirmation", async ({
@@ -94,7 +101,7 @@ test("Chinese speech becomes an editable reminder and saves only after confirmat
   await page.getByRole("button", { name: "通过语音添加提醒" }).click();
   expect((await stats(page)).starts).toBe(0);
   await expect(page.getByText(/系统语音服务可能在线处理音频/)).toBeVisible();
-  await page.getByRole("button", { name: "开始聆听" }).click();
+  await holdSpeech(page, "按住说话");
   expect((await stats(page)).language).toBe("zh-CN");
   await say(page, "后天9点");
   await say(page, "后天9点有医生预约");
@@ -102,7 +109,7 @@ test("Chinese speech becomes an editable reminder and saves only after confirmat
     "后天9点有医生预约",
   );
   await expect(page.getByRole("button", { name: "预览草稿" })).toBeDisabled();
-  await page.getByRole("button", { name: "停止聆听" }).click();
+  await page.mouse.up();
   await expect(page.getByLabel("用自然语言添加事项")).toHaveValue(
     "后天9点有医生预约",
   );
@@ -141,14 +148,16 @@ test("opening audio clears typed input and cancellation discards speech", async 
   await page.getByLabel("Natural language input").fill("Keep my original text");
   await page.getByRole("button", { name: "Add a reminder by audio" }).click();
   await expect(page.getByLabel("Natural language input")).toHaveValue("");
-  await page.getByRole("button", { name: "Start listening" }).click();
+  await holdSpeech(page);
   await page.evaluate(() =>
     (window as unknown as { speechTest: SpeechTest }).speechTest.fail(),
   );
   await expect(page.getByRole("alert")).toContainText("permission was denied");
-  await page.getByRole("button", { name: "Start listening" }).click();
+  await page.mouse.up();
+  await holdSpeech(page);
   await say(page, "This will be cancelled");
-  await page.getByRole("button", { name: "Cancel voice input" }).click();
+  await page.keyboard.press("Escape");
+  await page.mouse.up();
   await expect(page.getByLabel("Natural language input")).toHaveValue("");
   await expect(page.getByLabel("Natural language input")).toBeEditable();
   expect((await stats(page)).aborts).toBe(2);
@@ -188,9 +197,9 @@ test("AI interpretation uses the existing text endpoint only after explicit prev
   await expect(
     page.getByText("AI helps interpret your text when you preview."),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Start listening" }).click();
+  await holdSpeech(page);
   await say(page, "Dentist tomorrow at nine");
-  await page.getByRole("button", { name: "Stop listening" }).click();
+  await page.mouse.up();
   await page
     .getByLabel("Natural language input", { exact: true })
     .fill("Dentist tomorrow at 9am");
@@ -220,7 +229,7 @@ test("navigation stops recognition and narrow controls remain usable", async ({
   await setup(page);
   await page.setViewportSize({ width: 320, height: 740 });
   await page.getByRole("button", { name: "Add a reminder by audio" }).click();
-  await page.getByRole("button", { name: "Start listening" }).click();
+  await holdSpeech(page);
   await say(page, "Unsaved private speech");
   const box = await page.getByLabel("Natural language input").boundingBox();
   expect(box!.y).toBeGreaterThanOrEqual(56);
@@ -244,6 +253,7 @@ test("navigation stops recognition and narrow controls remain usable", async ({
     ),
   ).toBe(true);
   await navigate(page, "Calendar");
+  await page.mouse.up();
   expect((await stats(page)).aborts).toBe(1);
   await navigate(page, "Overview");
   await expect(page.getByLabel("Natural language input")).toHaveValue("");
@@ -263,13 +273,184 @@ test("unsupported browsers keep manual capture available without prompting", asy
   await expect(
     page.getByText(/Speech recognition is unavailable here/),
   ).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Start listening" }),
-  ).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Hold to speak" })).toHaveCount(
+    0,
+  );
   await page
     .getByLabel("Natural language input")
     .fill("Dentist tomorrow at 9am");
   await expect(
     page.getByRole("button", { name: "Preview draft" }),
   ).toBeEnabled();
+});
+
+test("sliding up cancels, sliding back restores release-to-finish", async ({
+  page,
+}) => {
+  await setup(page);
+  await page.getByRole("button", { name: "Add a reminder by audio" }).click();
+  await expect(
+    page.getByRole("button", { name: /Start listening|Stop listening/ }),
+  ).toHaveCount(0);
+  const point = await holdSpeech(page);
+  const hold = page.getByRole("button", { name: "Hold to speak", exact: true });
+  const position = await hold.boundingBox();
+  await say(page, "Discard this reminder");
+  await page.mouse.move(point.x, point.y - 90);
+  await expect(hold).toHaveText("Release to cancel");
+  await page.mouse.up();
+  await expect(page.getByLabel("Natural language input")).toHaveValue("");
+  await expect(
+    page.getByRole("button", { name: "Preview draft" }),
+  ).toBeDisabled();
+  expect((await stats(page)).aborts).toBe(1);
+
+  await page.getByRole("button", { name: "Add a reminder by audio" }).click();
+  const next = await holdSpeech(page);
+  await say(page, "Keep this reminder");
+  await page.mouse.move(next.x, next.y - 90);
+  await page.mouse.move(next.x, next.y);
+  await expect(hold).toHaveText("Release to finish");
+  expect(await hold.boundingBox()).toEqual(position);
+  await page.mouse.up();
+  await expect(page.getByLabel("Natural language input")).toHaveValue(
+    "Keep this reminder",
+  );
+  await expect(
+    page.getByRole("button", { name: "Preview draft" }),
+  ).toBeEnabled();
+});
+
+test("release during microphone startup cancels and ignores delayed callbacks", async ({
+  page,
+}) => {
+  await setup(page);
+  await page.evaluate(() => {
+    (window as unknown as { speechTest: SpeechTest }).speechTest.deferStart =
+      true;
+  });
+  await page.getByRole("button", { name: "Add a reminder by audio" }).click();
+  await holdSpeech(page);
+  await expect(page.getByRole("status")).toContainText(
+    "Starting microphone...",
+  );
+  await page.mouse.up();
+  await page.evaluate(() =>
+    (window as unknown as { speechTest: SpeechTest }).speechTest.begin(),
+  );
+  await say(page, "Late transcript must be discarded");
+  await expect(page.getByLabel("Natural language input")).toHaveValue("");
+  await expect(page.getByLabel("Natural language input")).toBeEditable();
+  expect((await stats(page)).aborts).toBe(1);
+});
+
+for (const key of ["Space", "Enter"]) {
+  test(`keyboard ${key} holds and releases without restarting speech`, async ({
+    page,
+  }) => {
+    await setup(page);
+    await page.getByRole("button", { name: "Add a reminder by audio" }).click();
+    const hold = page.getByRole("button", {
+      name: "Hold to speak",
+      exact: true,
+    });
+    await hold.focus();
+    await page.keyboard.down(key);
+    await say(page, "Keyboard reminder");
+    await page.keyboard.up(key);
+    await expect(page.getByLabel("Natural language input")).toHaveValue(
+      "Keyboard reminder",
+    );
+    await expect(page.getByLabel("Natural language input")).toBeEditable();
+    expect((await stats(page)).starts).toBe(1);
+  });
+}
+
+test("assistive activation uses the same button to finish", async ({
+  page,
+}) => {
+  await setup(page);
+  await page.getByRole("button", { name: "Add a reminder by audio" }).click();
+  const hold = page.getByRole("button", { name: "Hold to speak", exact: true });
+  await hold.dispatchEvent("click", { detail: 0 });
+  await expect(hold).toHaveText("Tap to finish");
+  await say(page, "Accessible reminder");
+  await hold.dispatchEvent("click", { detail: 0 });
+  await expect(page.getByLabel("Natural language input")).toHaveValue(
+    "Accessible reminder",
+  );
+  expect((await stats(page)).starts).toBe(1);
+});
+
+test("actual touch hold and cancellation release recognition", async ({
+  page,
+}) => {
+  await setup(page);
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: true });
+  await page.getByRole("button", { name: "Add a reminder by audio" }).click();
+  const hold = page.getByRole("button", { name: "Hold to speak", exact: true });
+  await hold.scrollIntoViewIfNeeded();
+  const box = (await hold.boundingBox())!;
+  const touchPoints = [{ x: box.x + box.width / 2, y: box.y + box.height / 2 }];
+  await cdp.send("Input.dispatchTouchEvent", {
+    type: "touchStart",
+    touchPoints,
+  });
+  await say(page, "Touch reminder");
+  await cdp.send("Input.dispatchTouchEvent", {
+    type: "touchEnd",
+    touchPoints: [],
+  });
+  await expect(page.getByLabel("Natural language input")).toHaveValue(
+    "Touch reminder",
+  );
+
+  await page.getByRole("button", { name: "Add a reminder by audio" }).click();
+  await hold.scrollIntoViewIfNeeded();
+  const next = (await hold.boundingBox())!;
+  await cdp.send("Input.dispatchTouchEvent", {
+    type: "touchStart",
+    touchPoints: [{ x: next.x + next.width / 2, y: next.y + next.height / 2 }],
+  });
+  await say(page, "Cancelled touch");
+  await cdp.send("Input.dispatchTouchEvent", {
+    type: "touchCancel",
+    touchPoints: [],
+  });
+  await expect(page.getByLabel("Natural language input")).toHaveValue("");
+  await say(page, "Late touch result");
+  await expect(page.getByLabel("Natural language input")).toHaveValue("");
+  expect((await stats(page)).aborts).toBe(2);
+  await cdp.detach();
+});
+
+test("the 60 second limit finishes even while the control is held", async ({
+  page,
+}) => {
+  await page.clock.install();
+  await setup(page);
+  await page.getByRole("button", { name: "Add a reminder by audio" }).click();
+  await holdSpeech(page);
+  await say(page, "Long reminder");
+  await page.clock.runFor(60_000);
+  await page.mouse.up();
+  await expect(page.getByLabel("Natural language input")).toHaveValue(
+    "Long reminder",
+  );
+  await expect(page.getByLabel("Natural language input")).toBeEditable();
+  expect((await stats(page)).aborts).toBe(1);
+});
+
+test("losing focus cancels a held recording", async ({ page }) => {
+  await setup(page);
+  await page.getByRole("button", { name: "Add a reminder by audio" }).click();
+  await holdSpeech(page);
+  await say(page, "Private interrupted reminder");
+  await page.evaluate(() => window.dispatchEvent(new Event("blur")));
+  await page.mouse.up();
+  await say(page, "Late interrupted reminder");
+  await expect(page.getByLabel("Natural language input")).toHaveValue("");
+  await expect(page.getByLabel("Natural language input")).toBeEditable();
+  expect((await stats(page)).aborts).toBe(1);
 });

@@ -329,18 +329,23 @@ dialog::backdrop {
   font-size: var(--text-small);
   margin-bottom: 8px;
 }
+.voice-panel .voice-followup {
+  margin-top: 8px;
+}
 .voice-controls {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
+  display: grid;
   gap: 8px 12px;
 }
-.voice-controls > p[role="status"] {
-  flex: 1 1 150px;
+.voice-controls > .voice-status {
   margin: 0;
+  min-height: 3em;
+  font-size: var(--text-small);
+  line-height: 1.5;
 }
 .voice-panel label {
   display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
   gap: 8px;
   margin: 0;
   font-size: var(--text-small);
@@ -361,6 +366,27 @@ dialog::backdrop {
 }
 .voice-actions button {
   min-height: 44px;
+}
+.voice-actions .voice-hold {
+  width: 100%;
+  min-height: 64px;
+  justify-content: center;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  scroll-margin-bottom: calc(100px + env(safe-area-inset-bottom));
+  background: var(--accent-soft);
+  color: var(--accent-hover);
+  border: 1px solid var(--line);
+}
+.voice-hold.is-recording {
+  background: var(--accent);
+  color: white;
+}
+.voice-hold.is-cancelling {
+  background: var(--danger);
+  color: white;
 }
 .voice-cancel {
   font-size: var(--text-small);

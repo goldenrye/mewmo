@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import type { Note, NoteResults } from "../src/types";
+import { holdSpeech } from "./speech-gesture";
 
 async function setup(page: Page, language = "en") {
   await page.addInitScript((language) => {
@@ -93,16 +94,12 @@ for (const lang of ["en", "zh-CN"]) {
         name: zh ? "通过语音添加笔记" : "Add a note by audio",
       })
       .click();
-    await page
-      .getByRole("button", { name: zh ? "开始聆听" : "Start listening" })
-      .click();
+    await holdSpeech(page, zh ? "按住说话" : "Hold to speak");
     await say(page, content);
     await expect(
       page.getByRole("button", { name: zh ? "预览笔记" : "Preview note" }),
     ).toBeDisabled();
-    await page
-      .getByRole("button", { name: zh ? "停止聆听" : "Stop listening" })
-      .click();
+    await page.mouse.up();
     expect(await list(page)).toEqual(before);
     await page
       .getByRole("button", { name: zh ? "预览笔记" : "Preview note" })
@@ -138,16 +135,12 @@ for (const lang of ["en", "zh-CN"]) {
           name: zh ? "通过语音查找笔记" : "Find notes by audio",
         })
         .click();
-      await page
-        .getByRole("button", { name: zh ? "开始聆听" : "Start listening" })
-        .click();
+      await holdSpeech(page, zh ? "按住说话" : "Hold to speak");
       await say(
         page,
         zh ? "找一下关于地板的笔记" : "the notes about the floor",
       );
-      await page
-        .getByRole("button", { name: zh ? "停止聆听" : "Stop listening" })
-        .click();
+      await page.mouse.up();
       await page
         .getByRole("button", {
           name: zh ? "搜索笔记" : "Search notes",
@@ -237,9 +230,12 @@ test("switching capture modes cancels microphone and stale recognition", async (
 }) => {
   await setup(page);
   await page.getByRole("button", { name: "Add a note by audio" }).click();
-  await page.getByRole("button", { name: "Start listening" }).click();
+  await holdSpeech(page);
   await say(page, "Unsaved note content");
-  await page.getByRole("button", { name: "Find notes", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Find notes", exact: true })
+    .dispatchEvent("click");
+  await page.mouse.up();
   expect(
     await page.evaluate(() => (window as unknown as { aborts: number }).aborts),
   ).toBe(1);
@@ -250,12 +246,13 @@ test("switching capture modes cancels microphone and stale recognition", async (
   await page.getByRole("button", { name: "Write a note", exact: true }).click();
   await expect(page.getByLabel("Note text")).toHaveValue("");
   await page.getByRole("button", { name: "Add a note by audio" }).click();
-  await page.getByRole("button", { name: "Start listening" }).click();
+  await holdSpeech(page);
   await say(page, "Another private transcript");
   await page
     .locator(".home-switch")
     .getByRole("button", { name: "Reminders", exact: true })
-    .click();
+    .dispatchEvent("click");
+  await page.mouse.up();
   expect(
     await page.evaluate(() => (window as unknown as { aborts: number }).aborts),
   ).toBe(2);
@@ -333,7 +330,7 @@ test("notes fit narrow layouts and speech keeps the main text visible", async ({
   }
   await page.setViewportSize({ width: 320, height: 740 });
   await page.getByRole("button", { name: "Add a note by audio" }).click();
-  await page.getByRole("button", { name: "Start listening" }).click();
+  await holdSpeech(page);
   await say(page, "Floor size is 20 square metres");
   const box = (await page.getByLabel("Note text").boundingBox())!;
   expect(box.y).toBeGreaterThanOrEqual(56);
@@ -342,7 +339,8 @@ test("notes fit narrow layouts and speech keeps the main text visible", async ({
     path: testInfo.outputPath("notes-recording.png"),
     fullPage: true,
   });
-  await page.getByRole("button", { name: "Cancel voice input" }).click();
+  await page.keyboard.press("Escape");
+  await page.mouse.up();
 });
 
 test("failed saves retain draft text and cancellation never writes a note", async ({
