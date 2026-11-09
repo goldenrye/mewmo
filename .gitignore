@@ -10,6 +10,7 @@ dist/
 .venv/
 backups/
 .secrets/
+secrets/
 frontend/ios/App/Pods/
 frontend/ios/App/build/
 frontend/ios/App/App/public/

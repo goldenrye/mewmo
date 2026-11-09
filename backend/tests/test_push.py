@@ -40,3 +40,14 @@ def test_missing_web_push_config_never_claims_acceptance(monkeypatch):
     monkeypatch.setattr(settings(), "vapid_private_key", "")
     with pytest.raises(PushFailure, match="web_push_not_configured"):
         send_push(Device(platform="web", subscription={}), {})
+
+
+def test_unreadable_apns_key_reports_specific_code(tmp_path, monkeypatch):
+    config = settings()
+    monkeypatch.setattr(config, "apns_key_path", str(tmp_path / "missing.p8"))
+    monkeypatch.setattr(config, "apns_key_id", "TEST")
+    monkeypatch.setattr(config, "apns_team_id", "TESTTEAM")
+    device = Device(platform="ios", subscription={"token": "a" * 64})
+    with pytest.raises(PushFailure, match="apns_key_unreadable") as raised:
+        send_push(device, {"reminder_id": "r", "item_id": "i", "title": "t", "body": "b"})
+    assert not raised.value.permanent

@@ -372,6 +372,7 @@
   "no_registered_device": "尚未注册通知设备",
   "delivery_failed": "发送失败，将自动重试",
   "apns_not_configured": "尚未配置 APNs",
+  "apns_key_unreadable": "无法读取 APNs 密钥文件",
   "web_push_not_configured": "尚未配置网页推送",
   "invalid_endpoint": "推送地址无效",
   "provider_error": "推送服务出错",

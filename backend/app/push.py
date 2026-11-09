@@ -46,9 +46,14 @@ def send_push(device: Device, payload: dict):
     if device.platform == "ios":
         if not all([config.apns_key_path, config.apns_key_id, config.apns_team_id]):
             raise PushFailure("apns_not_configured")
+        try:
+            key = Path(config.apns_key_path).read_text()
+        except OSError:
+            # Missing file, wrong mount, or not readable by the container user.
+            raise PushFailure("apns_key_unreadable") from None
         token = jwt.encode(
             {"iss": config.apns_team_id, "iat": int(time.time())},
-            Path(config.apns_key_path).read_text(),
+            key,
             algorithm="ES256",
             headers={"kid": config.apns_key_id},
         )
