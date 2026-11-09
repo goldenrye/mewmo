@@ -138,9 +138,15 @@ export function Editor({
         {!itemId && (
           <p className="muted">{t("Nothing is saved until you confirm.")}</p>
         )}
-        {notes.some((note) => note.startsWith("AI suggested")) && (
+        {(draft.interpretation === "ai" ||
+          notes.some((note) => note.startsWith("AI suggested"))) && (
           <p className="draft-source">{t("AI-assisted draft")}</p>
         )}
+        {!itemId &&
+          draft.source !== "manual" &&
+          draft.interpretation === "local" && (
+            <p className="draft-source">{t("Locally parsed draft")}</p>
+          )}
         {warnings.map((w, i) => (
           <div className="notice" key={i}>
             <AlertCircle size={17} />

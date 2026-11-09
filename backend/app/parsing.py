@@ -21,7 +21,8 @@ from .bill_fields import (
     labelled_values,
     payee_from_lines,
 )
-from .schemas import Draft, ParseRequest, default_rules, redact_accounts
+from .relative_time import RELATIVE_ERROR, relative_time
+from .schemas import Draft, ParseRequest, ReminderRule, default_rules, redact_accounts
 
 register_heif_opener()
 
@@ -181,6 +182,14 @@ def extract_date(text: str, request: ParseRequest):
     return day, clock, remainder, uncertain
 
 
+def text_status(text: str, kind: str) -> str:
+    if re.search(r"已付|已支付|已缴|(?<!un)\bpaid\b", text, re.I) and not re.search(
+        r"\bnot paid\b|未付", text, re.I
+    ):
+        return "paid" if kind == "bill" else "completed"
+    return "open"
+
+
 def parse_text(request: ParseRequest) -> Draft:
     text = request.text.strip()
     money = MONEY.search(text)
@@ -191,6 +200,20 @@ def parse_text(request: ParseRequest) -> Draft:
     appointment = re.search(r"appointment|meeting|dentist|doctor|预约|会议|看医生", text, re.I)
     kind = "bill" if is_bill else "appointment" if appointment else "dated_item"
     day, clock, title, uncertain = extract_date(text, request)
+    countdown = None
+    notes = []
+    try:
+        countdown = relative_time(request)
+        if countdown and ((day and day != countdown[0]) or (clock and clock != countdown[1])):
+            countdown = None
+            raise ValueError(RELATIVE_ERROR)
+    except ValueError as error:
+        day, clock = None, None
+        uncertain = ["due_date", "due_time"]
+        notes = [str(error)]
+    if countdown:
+        day, clock, title, notes = countdown
+        uncertain = []
     draft = Draft(
         local_date=request.local_date,
         timezone=request.timezone,
@@ -198,7 +221,8 @@ def parse_text(request: ParseRequest) -> Draft:
         due_date=day,
         due_time=clock or ("09:00" if kind != "appointment" and "due_time" not in uncertain else None),
         uncertain=uncertain,
-        rules=default_rules(kind),
+        rules=[ReminderRule(minutes=0)] if countdown else default_rules(kind),
+        warnings=notes,
     )
     if money:
         symbol = (money["prefix"] or money["suffix"]).upper()
@@ -211,10 +235,7 @@ def parse_text(request: ParseRequest) -> Draft:
             draft.uncertain.append("currency")
             draft.warnings.append(f"Please confirm the currency; interpreted {symbol} as {draft.currency}.")
         title = title.replace(money[0], "")
-    if re.search(r"已付|已支付|已缴|(?<!un)\bpaid\b", text, re.I) and not re.search(
-        r"\bnot paid\b|未付", text, re.I
-    ):
-        draft.status = "paid" if kind == "bill" else "completed"
+    draft.status = text_status(text, kind)
     title = re.sub(
         r"这个月|本月|已付|已支付|已缴|(?<!un)\bpaid\b|"
         r"\b(?:remind me to|remind me|on|at|due|this month)\b",

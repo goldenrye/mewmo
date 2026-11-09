@@ -11,6 +11,7 @@ import { context, defaults, fullDate, manualDraft, money } from "./types";
 import catalog from "./zh-CN.json";
 
 afterEach(() => {
+  vi.useRealTimers();
   setLanguage("system");
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
@@ -57,6 +58,8 @@ it("formats the regression date in Chinese without changing the date or time", (
 });
 
 it("does not change currencies, dates, zones or reminder rules with language", () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-11-09T05:33:00Z"));
   const original = {
     context: context(),
     rules: defaults("bill"),

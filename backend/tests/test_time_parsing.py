@@ -87,6 +87,7 @@ def test_explicit_time_survives_ai_and_stays_unsaved(client, db, monkeypatch, en
             {
                 "kind": "appointment",
                 "title": "坐飞机",
+                "due_date": "2026-11-11",
                 "due_time": model_time,
             }
         ),

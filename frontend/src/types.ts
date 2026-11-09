@@ -24,10 +24,11 @@ export type Draft = {
   warnings: string[];
   duplicates: string[];
   source: "manual" | "text" | "file";
+  interpretation?: "local" | "ai";
 };
 export type Item = Omit<
   Draft,
-  "uncertain" | "warnings" | "duplicates" | "source"
+  "uncertain" | "warnings" | "duplicates" | "source" | "interpretation"
 > & {
   id: string;
   due_at: string;
@@ -101,6 +102,7 @@ export function context() {
   const now = new Date();
   return {
     local_date: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`,
+    client_now: now.toISOString(),
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
   };
 }

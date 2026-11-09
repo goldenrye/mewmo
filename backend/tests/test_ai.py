@@ -229,7 +229,7 @@ def test_unsafe_or_invalid_model_output_falls_back(client, output):
     assert AI_FAILURE in draft["warnings"]
 
 
-def test_confident_local_fields_are_not_overwritten(client):
+def test_ai_fields_take_precedence_without_running_local_parser(client):
     save(client)
     with (
         patch(
@@ -240,10 +240,11 @@ def test_confident_local_fields_are_not_overwritten(client):
             "app.ai_assistance.request_model",
             return_value=SUGGESTION,
         ),
+        patch("app.main.parse_file", side_effect=AssertionError("Local parser must only be a fallback")),
     ):
         draft = client.post(FILE_URL, content=b"file").json()
-    assert draft["payee"] == "Local Co" and draft["due_date"] == "2026-11-10"
-    assert draft["amount"] == "42"
+    assert draft["payee"] == "Boost Mobile" and draft["due_date"] == "2026-11-12"
+    assert draft["amount"] == "61.78" and draft["interpretation"] == "ai"
     assert {"payee", "amount", "due_date"} <= set(draft["uncertain"])
 
 
@@ -314,11 +315,18 @@ def test_not_a_bill_image_cannot_become_a_saved_item(client, db):
 def test_ai_reminder_import_is_draft_only_without_bill_fields(client, db, kind, local):
     save(client)
     source = "Meeting\nDate: unreadable" if kind == "appointment" else "Renewal reminder"
-    suggestion = json.dumps({
-        "is_bill": False, "kind": kind, "title": "Review document",
-        "due_date": "2026-11-12", "due_time": "14:30",
-        "amount": "40", "currency": "USD", "payee": "Not a bill",
-    })
+    suggestion = json.dumps(
+        {
+            "is_bill": False,
+            "kind": kind,
+            "title": "Review document",
+            "due_date": "2026-11-12",
+            "due_time": "14:30",
+            "amount": "40",
+            "currency": "USD",
+            "payee": "Not a bill",
+        }
+    )
     with (
         patch("app.main.extract_file", return_value=source if local else "Unrecognized layout"),
         patch("app.ai_assistance.request_model", return_value=suggestion),
@@ -334,13 +342,16 @@ def test_ai_reminder_import_is_draft_only_without_bill_fields(client, db, kind, 
     assert db.scalar(select(func.count()).select_from(Reminder)) == 0
 
 
-@pytest.mark.parametrize("output", [
-    {"is_bill": True, "kind": "appointment", "title": "Meeting"},
-    {"is_bill": False, "kind": "bill"},
-    {"is_bill": False},
-    {"kind": "dated_item"},
-    {"kind": "appointment", "title": "Meeting", "status": "completed"},
-])
+@pytest.mark.parametrize(
+    "output",
+    [
+        {"is_bill": True, "kind": "appointment", "title": "Meeting"},
+        {"is_bill": False, "kind": "bill"},
+        {"is_bill": False},
+        {"kind": "dated_item"},
+        {"kind": "appointment", "title": "Meeting", "status": "completed"},
+    ],
+)
 def test_invalid_file_classification_keeps_local_reminder(client, output):
     save(client)
     with (
@@ -353,15 +364,15 @@ def test_invalid_file_classification_keeps_local_reminder(client, output):
     assert AI_FAILURE in draft["warnings"]
 
 
-def test_ai_classification_disagreement_keeps_local_kind_and_rules(client):
+def test_ai_classification_controls_kind_and_app_defined_rules(client):
     save(client)
     with (
         patch("app.main.extract_file", return_value="Meeting\nDate: 2026-11-08\nTime: 9am"),
         patch("app.ai_assistance.request_model", return_value=SUGGESTION),
     ):
         draft = client.post(FILE_URL, content=b"file").json()
-    assert draft["kind"] == "appointment" and len(draft["rules"]) == 2
-    assert draft["amount"] is None and AI_FAILURE in draft["warnings"]
+    assert draft["kind"] == "bill" and len(draft["rules"]) == 4
+    assert draft["amount"] == "61.78" and AI_FAILURE not in draft["warnings"]
 
 
 def test_changed_image_provider_requires_new_consent(client):
@@ -395,12 +406,15 @@ def test_zero_amount_and_paid_text_status_are_preserved(client):
         patch("app.main.extract_file", return_value="BILL\nAmount due: USD 0"),
         patch(
             "app.ai_assistance.request_model",
-            return_value=SUGGESTION,
+            return_value=json.dumps(json.loads(SUGGESTION) | {"amount": "0"}),
         ),
     ):
         draft = client.post(FILE_URL, content=b"file").json()
     assert draft["amount"] == "0"
-    with patch("app.ai_assistance.request_model", return_value=SUGGESTION):
+    with patch(
+        "app.ai_assistance.request_model",
+        return_value=json.dumps(json.loads(SUGGESTION) | {"amount": "120"}),
+    ):
         draft = client.post(
             "/api/drafts/text",
             json={

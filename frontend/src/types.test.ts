@@ -9,6 +9,7 @@ describe("shared client contracts", () => {
     vi.setSystemTime(new Date(2026, 10, 6, 9));
     expect(context()).toEqual({
       local_date: "2026-11-06",
+      client_now: new Date(2026, 10, 6, 9).toISOString(),
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     });
   });

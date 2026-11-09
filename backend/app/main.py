@@ -1,7 +1,7 @@
 import hashlib
 import re
 import threading
-from datetime import date
+from datetime import UTC, date, datetime
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, Response
@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from .accounts import router as accounts_router
-from .ai_assistance import assist_draft
+from .ai_assistance import AI_FAILURE, assist_draft
 from .auth import client_key_hash, require_user
 from .config import settings
 from .database import session
@@ -158,8 +158,15 @@ def duplicates(db: Session, draft: Draft, user_id: str) -> Draft:
 
 @router.post("/drafts/text", response_model=Draft)
 def text_draft(body: ParseRequest, db: Session = Depends(session), user: User = Depends(require_user)):
-    draft = parse_text(body)
-    draft = assist_draft(db.get(ModelPreference, user.id), draft, body, body.text)
+    if body.client_now is None:
+        # Older clients send only a date; use one server instant for the whole parse.
+        body = body.model_copy(update={"client_now": datetime.now(UTC)})
+    preference = db.get(ModelPreference, user.id)
+    draft = assist_draft(preference, body, body.text)
+    if draft is None:
+        draft = parse_text(body)
+        if preference and preference.enabled:
+            draft.warnings.append(AI_FAILURE)
     return duplicates(db, draft, user.id)
 
 
@@ -202,19 +209,29 @@ async def file_draft(
         extracted, draft, failure = "", None, None
         try:
             extracted = await run_in_threadpool(extract_file, bytes(data))
-            draft = parse_file(extracted, context)
         except ParseFailure as error:
             failure = error
         data.clear()
-        if draft is not None or extracted or image_data:
+        if extracted or image_data:
             draft = await run_in_threadpool(
                 assist_draft,
                 preference,
-                draft,
                 context,
                 extracted,
                 image_data,
+                source="file",
             )
+        if draft is None and extracted:
+            try:
+                draft = await run_in_threadpool(parse_file, extracted, context)
+                if preference and preference.enabled:
+                    draft.warnings.append(AI_FAILURE)
+                    if image_data:
+                        draft.warnings.append(
+                            "Image analysis did not produce a usable draft. Images may have been sent to your configured providers."
+                        )
+            except ParseFailure as error:
+                failure = error
         if draft is None:
             raise failure or ParseFailure(
                 "We could not read this file. Try a clearer image or enter it manually."

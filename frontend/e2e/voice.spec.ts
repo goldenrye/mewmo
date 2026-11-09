@@ -204,8 +204,10 @@ test("AI interpretation uses the existing text endpoint only after explicit prev
     text: "Dentist tomorrow at 9am",
     timezone: expect.any(String),
     local_date: expect.any(String),
+    client_now: expect.any(String),
   });
   expect(Object.keys(bodies[0]).sort()).toEqual([
+    "client_now",
     "local_date",
     "text",
     "timezone",

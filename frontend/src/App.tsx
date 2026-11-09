@@ -1153,9 +1153,7 @@ function Workspace({
                 {modelSettings?.enabled && (
                   <p className="small muted">
                     {t(
-                      (modelSettings.models?.length ?? 1) > 1
-                        ? "AI-assisted capture is on. Models are tried in your saved order."
-                        : "AI-assisted capture is on. New input is sent to your selected provider.",
+                      "AI-first capture. Local parsing takes over if your models are unavailable.",
                     )}
                   </p>
                 )}
@@ -1175,6 +1173,11 @@ function Workspace({
                             ? "Send document images to my configured AI models for this import"
                             : "Send document images to my AI provider for this import",
                         )}
+                        <small className="image-model-chain">
+                          {t(
+                            "AI already reads extracted text. This also shares the images.",
+                          )}
+                        </small>
                         {(modelSettings.models?.length ?? 0) > 1 && (
                           <small className="image-model-chain">
                             {t("Tried in order: {models}", {

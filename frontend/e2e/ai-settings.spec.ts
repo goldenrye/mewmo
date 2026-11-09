@@ -94,7 +94,7 @@ test("configure, test, disable, and remove a private model without displaying it
   await panel.getByLabel("Provider", { exact: true }).selectOption("anthropic");
   await panel.getByLabel("Model ID").fill("claude-example-model");
   await panel.getByLabel("API key", { exact: true }).fill(secret);
-  await panel.getByLabel("Enable AI assistance").check();
+  await expect(panel.getByLabel("Use AI by default")).toBeChecked();
   await expect(panel.getByLabel("Use AI for note search")).toBeChecked();
   await panel.getByLabel("Allow optional image analysis").check();
   await panel.getByRole("button", { name: "Save AI settings" }).click();
@@ -111,7 +111,7 @@ test("configure, test, disable, and remove a private model without displaying it
   );
   await panel.getByRole("button", { name: "Test saved model" }).click();
   await expect(panel.getByText("Connection successful.")).toBeVisible();
-  await panel.getByLabel("Enable AI assistance").uncheck();
+  await panel.getByLabel("Use AI by default").uncheck();
   await expect(panel.getByLabel("Use AI for note search")).toBeDisabled();
   await panel.getByRole("button", { name: "Save AI settings" }).click();
   await expect(panel.getByText("Local parsing only.")).toBeVisible();
@@ -180,7 +180,7 @@ test("provider changes clear the key and require fresh consent; failures remain 
   await panel.getByLabel("API key", { exact: true }).fill(secret);
   await panel.getByLabel("Provider", { exact: true }).selectOption("gemini");
   await expect(panel.getByLabel("API key", { exact: true })).toHaveValue("");
-  await expect(panel.getByLabel("Enable AI assistance")).not.toBeChecked();
+  await expect(panel.getByLabel("Use AI by default")).not.toBeChecked();
   await expect(
     panel.getByLabel("Allow optional image analysis"),
   ).not.toBeChecked();
@@ -314,7 +314,7 @@ test("Doubao can be configured in Chinese with its own key and endpoint ID", asy
   await expect(panel.getByText(/请使用火山方舟 API 密钥/)).toBeVisible();
   await panel.getByLabel("模型 ID").fill("ep-20261107000000-example");
   await panel.getByLabel("API 密钥", { exact: true }).fill(secret);
-  await panel.getByLabel("开启 AI 辅助").check();
+  await expect(panel.getByLabel("默认使用 AI")).toBeChecked();
   await panel.getByRole("button", { name: "保存 AI 设置" }).click();
   await expect(panel.getByText("AI 设置已保存。")).toBeVisible();
   expect(writes[0]).toMatchObject({
@@ -368,7 +368,7 @@ test("real settings API persists for a member without making a provider call", a
   );
   await expect(primary.getByLabel("API key", { exact: true })).toHaveValue("");
   await expect(restored.locator(".model-entry")).toHaveCount(2);
-  await expect(restored.getByLabel("Enable AI assistance")).not.toBeChecked();
+  await expect(restored.getByLabel("Use AI by default")).toBeChecked();
   await restored
     .getByRole("button", { name: "Move model 2 up", exact: true })
     .click();
@@ -417,7 +417,7 @@ test("models can be added ordered tested and removed without mixing keys", async
   await expect(
     entries.nth(0).getByLabel("API key", { exact: true }),
   ).toHaveValue("second-test-key");
-  await panel.getByLabel("Enable AI assistance").check();
+  await panel.getByLabel("Use AI by default").check();
   await panel.getByRole("button", { name: "Save AI settings" }).click();
   await expect(panel.getByText("AI settings saved.")).toBeVisible();
   expect(writes[0].models).toEqual([
@@ -562,3 +562,96 @@ test("image consent discloses every fallback and sends the chain token", async (
   expect(requests[0].searchParams.get("image_revision")).toBe("17");
   await expect(consent).not.toBeChecked();
 });
+
+test("saved AI opt-out stays off after reload and an unrelated settings save", async ({
+  page,
+}) => {
+  const writes = await mockSettings(page, {
+    ...empty,
+    has_key: true,
+    model: "saved-model",
+    enabled: false,
+  });
+  await login(page);
+  let panel = await openSettings(page);
+  await expect(panel.getByLabel("Use AI by default")).not.toBeChecked();
+  await panel.getByRole("button", { name: "Save AI settings" }).click();
+  await expect.poll(() => writes.length).toBe(1);
+  expect(writes[0].enabled).toBe(false);
+  await page.reload();
+  panel = await openSettings(page);
+  await expect(panel.getByLabel("Use AI by default")).not.toBeChecked();
+});
+
+for (const interpretation of ["ai", "local"]) {
+  test(`capture automatically uses saved AI preference and shows ${interpretation} provenance`, async ({
+    page,
+  }) => {
+    await mockSettings(page, {
+      ...empty,
+      has_key: true,
+      model: "saved-model",
+      enabled: true,
+    });
+    const requests: Record<string, unknown>[] = [];
+    await page.route("**/api/drafts/text", async (route) => {
+      requests.push(route.request().postDataJSON());
+      await route.fulfill({
+        json: {
+          kind: "appointment",
+          title: "Discuss the invoice",
+          payee: null,
+          amount: null,
+          currency: null,
+          account_last4: null,
+          due_date: "2099-11-13",
+          due_time: "15:30",
+          timezone: "Asia/Shanghai",
+          status: "open",
+          rules: [],
+          uncertain: ["title", "due_date", "due_time"],
+          warnings:
+            interpretation === "ai"
+              ? [
+                  "AI suggested draft fields. Review them carefully; nothing has been saved.",
+                ]
+              : [
+                  "AI assistance was unavailable. Review the local draft or enter missing fields manually.",
+                ],
+          duplicates: [],
+          source: "text",
+          interpretation,
+        },
+      });
+    });
+    await login(page);
+    const before = await page.request
+      .get("/api/items")
+      .then((response) => response.json());
+    await expect(
+      page.getByText(
+        "AI-first capture. Local parsing takes over if your models are unavailable.",
+      ),
+    ).toBeVisible();
+    await expect(page.getByLabel("Use AI by default")).toHaveCount(0);
+    await page
+      .getByLabel("Natural language input", { exact: true })
+      .fill("Discuss the invoice next Friday");
+    await page.getByRole("button", { name: "Preview draft" }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(
+      dialog.getByText(
+        interpretation === "ai" ? "AI-assisted draft" : "Locally parsed draft",
+      ),
+    ).toBeVisible();
+    await expect(dialog.getByLabel("Title", { exact: false })).toHaveValue(
+      "Discuss the invoice",
+    );
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).not.toHaveProperty("use_ai");
+    expect(
+      await page.request.get("/api/items").then((response) => response.json()),
+    ).toHaveLength(before.length);
+    await dialog.getByRole("button", { name: "Close editor" }).click();
+  });
+}

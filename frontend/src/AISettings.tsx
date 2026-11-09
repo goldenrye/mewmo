@@ -41,7 +41,7 @@ export function AISettings({
         : [blankModel()],
     );
     setTested({});
-    setEnabled(value.enabled);
+    setEnabled(value.has_key ? value.enabled : true);
     setImages(value.allow_images);
     setNoteSearch(value.allow_note_search ?? !value.has_key);
     setDirty(false);
@@ -159,7 +159,7 @@ export function AISettings({
     <section className="settings-card account-card ai-settings">
       <h2>{t("AI assistance")}</h2>
       <p className="muted">
-        {t("Use your own model for reminders and note search.")}
+        {t("AI interprets reminders first. Local parsing is the backup.")}
       </p>
       {saved && (
         <p>
@@ -244,7 +244,7 @@ export function AISettings({
                         ),
                       );
                       if (value.provider) {
-                        setEnabled(false);
+                        if (saved.has_key) setEnabled(false);
                         setImages(false);
                       }
                     }}
@@ -307,7 +307,7 @@ export function AISettings({
                   checked={enabled}
                   onChange={(event) => setEnabled(event.target.checked)}
                 />
-                <span>{t("Enable AI assistance")}</span>
+                <span>{t("Use AI by default")}</span>
               </label>
               <p className="muted">
                 {t(

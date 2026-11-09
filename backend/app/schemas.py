@@ -4,7 +4,7 @@ from decimal import Decimal
 from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import AwareDatetime, BaseModel, Field, field_validator, model_validator
 
 Kind = Literal["appointment", "bill", "dated_item"]
 State = Literal["open", "paid", "completed"]
@@ -61,6 +61,13 @@ class Context(BaseModel):
 
 class ParseRequest(Context):
     text: str = Field(min_length=1, max_length=4000)
+    client_now: AwareDatetime | None = None
+
+    @model_validator(mode="after")
+    def valid_client_clock(self):
+        if self.client_now and self.client_now.astimezone(ZoneInfo(self.timezone)).date() != self.local_date:
+            raise ValueError("The client date and time do not match. Refresh and try again.")
+        return self
 
 
 class Draft(Context):
@@ -78,6 +85,7 @@ class Draft(Context):
     duplicates: list[str] = Field(default_factory=list)
     rules: list[ReminderRule] = Field(default_factory=list)
     source: Literal["text", "file", "manual"] = "text"
+    interpretation: Literal["local", "ai"] = "local"
 
 
 class ItemInput(Context):
