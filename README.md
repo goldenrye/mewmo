@@ -49,7 +49,7 @@ Deploy through migration **0006** (`alembic upgrade head` / the existing Compose
 
 ### Reminder Import
 
-On Home, choose **Import a reminder** to upload a PDF or image containing a bill, appointment/event confirmation, or dated notice such as a renewal, expiry, or return deadline. The importer prepares one draft with the matching item type and default reminder rules. It never creates multiple items automatically.
+On Home, choose **Import reminder** to upload a PDF or image containing a bill, appointment/event confirmation, or dated notice such as a renewal, expiry, or return deadline. The importer prepares one draft with the matching item type and default reminder rules. It never creates multiple items automatically.
 
 Local extraction supports English and Chinese labels, event dates/times, and relative dates using the client's local date and IANA timezone. Common sent/printed/birth-date metadata lines are excluded. Missing or conflicting dates/times require review; appointment times are not invented. Dated notices without a time suggest 09:00 and flag it for confirmation. Event prices do not populate bill fields. Titles and inferred item types are flagged for review.
 
@@ -257,7 +257,7 @@ Camera/photo library descriptions support importing bill and reminder photos. A 
 
 ### Microphone Input
 
-On Home, choose **Add a reminder by audio** beside **Import a reminder**. This clears the reminder box. Select English or Mandarin, read the privacy notice, then **Hold to speak**: press and hold, speak, and release to finish. Slide upward at least 64 pixels until **Release to cancel** appears, then release to discard; sliding back restores normal release-to-finish. There are no separate Start/Stop listening buttons. Speech appears directly in the main reminder box; there is no separate transcript panel. Recognition also stops after 60 seconds. Notes and note search use the same control. Releasing only leaves editable text; **Preview draft** and **Confirm & save** are still required.
+On Home, choose **Voice input** beside **Import reminder**. This clears the reminder box. Select English or Mandarin, read the privacy notice, then **Hold to speak**: press and hold, speak, and release to finish. Slide upward at least 64 pixels until **Release to cancel** appears, then release to discard; sliding back restores normal release-to-finish. There are no separate Start/Stop listening buttons. Speech appears directly in the main reminder box; there is no separate transcript panel. Recognition also stops after 60 seconds. Notes and note search use the same control. Releasing only leaves editable text; **Preview draft** and **Confirm & save** are still required.
 
 Keyboard users can hold Space or Enter on the speech control and release to finish; Escape cancels. Screen-reader activation uses the same button once to begin and again to finish, without requiring a hold gesture. Losing focus, a cancelled touch, leaving the page, or releasing before microphone startup cancels unfinished speech and ignores late callbacks. On first use, grant any system permissions, then hold again if the permission prompt interrupted the gesture.
 

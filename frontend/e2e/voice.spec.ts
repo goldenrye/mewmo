@@ -98,7 +98,7 @@ test("Chinese speech becomes an editable reminder and saves only after confirmat
   await page.clock.setFixedTime(new Date("2026-11-06T12:00:00"));
   await setup(page, "zh-CN");
   const before = await page.request.get("/api/items").then((r) => r.json());
-  await page.getByRole("button", { name: "通过语音添加提醒" }).click();
+  await page.getByRole("button", { name: "语音输入" }).click();
   expect((await stats(page)).starts).toBe(0);
   await expect(page.getByText(/系统语音服务可能在线处理音频/)).toBeVisible();
   await holdSpeech(page, "按住说话");
@@ -146,7 +146,7 @@ test("opening audio clears typed input and cancellation discards speech", async 
 }) => {
   await setup(page);
   await page.getByLabel("Natural language input").fill("Keep my original text");
-  await page.getByRole("button", { name: "Add a reminder by audio" }).click();
+  await page.getByRole("button", { name: "Voice input" }).click();
   await expect(page.getByLabel("Natural language input")).toHaveValue("");
   await holdSpeech(page);
   await page.evaluate(() =>
@@ -193,7 +193,7 @@ test("AI interpretation uses the existing text endpoint only after explicit prev
       },
     });
   });
-  await page.getByRole("button", { name: "Add a reminder by audio" }).click();
+  await page.getByRole("button", { name: "Voice input" }).click();
   await expect(
     page.getByText("AI helps interpret your text when you preview."),
   ).toBeVisible();
@@ -228,7 +228,7 @@ test("navigation stops recognition and narrow controls remain usable", async ({
 }) => {
   await setup(page);
   await page.setViewportSize({ width: 320, height: 740 });
-  await page.getByRole("button", { name: "Add a reminder by audio" }).click();
+  await page.getByRole("button", { name: "Voice input" }).click();
   await holdSpeech(page);
   await say(page, "Unsaved private speech");
   const box = await page.getByLabel("Natural language input").boundingBox();
@@ -236,9 +236,9 @@ test("navigation stops recognition and narrow controls remain usable", async ({
   expect(box!.y + box!.height).toBeLessThan(600);
   await expect(page.locator(".voice-panel textarea")).toHaveCount(0);
   const audioButton = page.getByRole("button", {
-    name: "Add a reminder by audio",
+    name: "Voice input",
   });
-  const importButton = page.getByRole("button", { name: "Import a reminder" });
+  const importButton = page.getByRole("button", { name: "Import reminder" });
   expect(
     await audioButton.evaluate((node) => getComputedStyle(node).fontSize),
   ).toBe(
@@ -259,6 +259,39 @@ test("navigation stops recognition and narrow controls remain usable", async ({
   await expect(page.getByLabel("Natural language input")).toHaveValue("");
 });
 
+for (const language of ["en", "zh-CN"]) {
+  test(`compact capture actions stay on one line (${language})`, async ({
+    page,
+  }) => {
+    await setup(page, language);
+    const upload = page.getByRole("button", {
+      name: language === "en" ? "Import reminder" : "导入提醒",
+      exact: true,
+    });
+    const audio = page.getByRole("button", {
+      name: language === "en" ? "Voice input" : "语音输入",
+      exact: true,
+    });
+    for (const width of [320, 375, 390]) {
+      await page.setViewportSize({ width, height: 844 });
+      await expect(upload).toBeVisible();
+      await expect(audio).toBeVisible();
+      const left = (await upload.boundingBox())!;
+      const right = (await audio.boundingBox())!;
+      expect(left.y).toBeCloseTo(right.y, 0);
+      expect(left.height).toBe(44);
+      expect(right.height).toBe(44);
+      expect(left.x + left.width).toBeLessThanOrEqual(right.x);
+      expect(right.x + right.width).toBeLessThanOrEqual(width);
+      expect(
+        await page
+          .locator(".capture-actions")
+          .evaluate((node) => node.scrollWidth <= node.clientWidth),
+      ).toBe(true);
+    }
+  });
+}
+
 test("unsupported browsers keep manual capture available without prompting", async ({
   page,
 }) => {
@@ -269,7 +302,7 @@ test("unsupported browsers keep manual capture available without prompting", asy
       webkitSpeechRecognition: undefined,
     }),
   );
-  await page.getByRole("button", { name: "Add a reminder by audio" }).click();
+  await page.getByRole("button", { name: "Voice input" }).click();
   await expect(
     page.getByText(/Speech recognition is unavailable here/),
   ).toBeVisible();
@@ -288,7 +321,7 @@ test("sliding up cancels, sliding back restores release-to-finish", async ({
   page,
 }) => {
   await setup(page);
-  await page.getByRole("button", { name: "Add a reminder by audio" }).click();
+  await page.getByRole("button", { name: "Voice input" }).click();
   await expect(
     page.getByRole("button", { name: /Start listening|Stop listening/ }),
   ).toHaveCount(0);
@@ -305,7 +338,7 @@ test("sliding up cancels, sliding back restores release-to-finish", async ({
   ).toBeDisabled();
   expect((await stats(page)).aborts).toBe(1);
 
-  await page.getByRole("button", { name: "Add a reminder by audio" }).click();
+  await page.getByRole("button", { name: "Voice input" }).click();
   const next = await holdSpeech(page);
   await say(page, "Keep this reminder");
   await page.mouse.move(next.x, next.y - 90);
@@ -329,7 +362,7 @@ test("release during microphone startup cancels and ignores delayed callbacks", 
     (window as unknown as { speechTest: SpeechTest }).speechTest.deferStart =
       true;
   });
-  await page.getByRole("button", { name: "Add a reminder by audio" }).click();
+  await page.getByRole("button", { name: "Voice input" }).click();
   await holdSpeech(page);
   await expect(page.getByRole("status")).toContainText(
     "Starting microphone...",
@@ -349,7 +382,7 @@ for (const key of ["Space", "Enter"]) {
     page,
   }) => {
     await setup(page);
-    await page.getByRole("button", { name: "Add a reminder by audio" }).click();
+    await page.getByRole("button", { name: "Voice input" }).click();
     const hold = page.getByRole("button", {
       name: "Hold to speak",
       exact: true,
@@ -370,7 +403,7 @@ test("assistive activation uses the same button to finish", async ({
   page,
 }) => {
   await setup(page);
-  await page.getByRole("button", { name: "Add a reminder by audio" }).click();
+  await page.getByRole("button", { name: "Voice input" }).click();
   const hold = page.getByRole("button", { name: "Hold to speak", exact: true });
   await hold.dispatchEvent("click", { detail: 0 });
   await expect(hold).toHaveText("Tap to finish");
@@ -388,7 +421,7 @@ test("actual touch hold and cancellation release recognition", async ({
   await setup(page);
   const cdp = await page.context().newCDPSession(page);
   await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: true });
-  await page.getByRole("button", { name: "Add a reminder by audio" }).click();
+  await page.getByRole("button", { name: "Voice input" }).click();
   const hold = page.getByRole("button", { name: "Hold to speak", exact: true });
   await hold.scrollIntoViewIfNeeded();
   const box = (await hold.boundingBox())!;
@@ -406,7 +439,7 @@ test("actual touch hold and cancellation release recognition", async ({
     "Touch reminder",
   );
 
-  await page.getByRole("button", { name: "Add a reminder by audio" }).click();
+  await page.getByRole("button", { name: "Voice input" }).click();
   await hold.scrollIntoViewIfNeeded();
   const next = (await hold.boundingBox())!;
   await cdp.send("Input.dispatchTouchEvent", {
@@ -430,7 +463,7 @@ test("the 60 second limit finishes even while the control is held", async ({
 }) => {
   await page.clock.install();
   await setup(page);
-  await page.getByRole("button", { name: "Add a reminder by audio" }).click();
+  await page.getByRole("button", { name: "Voice input" }).click();
   await holdSpeech(page);
   await say(page, "Long reminder");
   await page.clock.runFor(60_000);
@@ -444,7 +477,7 @@ test("the 60 second limit finishes even while the control is held", async ({
 
 test("losing focus cancels a held recording", async ({ page }) => {
   await setup(page);
-  await page.getByRole("button", { name: "Add a reminder by audio" }).click();
+  await page.getByRole("button", { name: "Voice input" }).click();
   await holdSpeech(page);
   await say(page, "Private interrupted reminder");
   await page.evaluate(() => window.dispatchEvent(new Event("blur")));

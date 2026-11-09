@@ -1144,7 +1144,7 @@ function Workspace({
                     onClick={() => file.current?.click()}
                   >
                     <Upload size={15} />
-                    {t("Import a reminder")}
+                    {t("Import reminder")}
                   </button>
                 </VoiceInput>
                 <p className="small muted">

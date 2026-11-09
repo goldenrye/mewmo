@@ -301,7 +301,7 @@ dialog::backdrop {
 }
 .capture-actions {
   justify-content: flex-start;
-  gap: 4px 20px;
+  gap: 4px 12px;
 }
 .capture-actions button {
   min-height: 44px;
@@ -309,6 +309,7 @@ dialog::backdrop {
   font-weight: 500;
   padding: 2px 0;
   gap: 7px;
+  white-space: nowrap;
 }
 .capture-actions button svg {
   width: 15px;

@@ -56,7 +56,7 @@ for (const language of ["en", "zh-CN"]) {
       const chooser = page.waitForEvent("filechooser");
       await page
         .getByRole("button", {
-          name: language === "en" ? "Import a reminder" : "导入提醒",
+          name: language === "en" ? "Import reminder" : "导入提醒",
           exact: true,
         })
         .click();

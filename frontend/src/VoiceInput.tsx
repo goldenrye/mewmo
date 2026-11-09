@@ -10,7 +10,7 @@ export function VoiceInput({
   onReset,
   onBusy,
   children,
-  triggerLabel = "Add a reminder by audio",
+  triggerLabel = "Voice input",
   unavailableLabel = "Speech recognition is unavailable here. Use keyboard dictation or type your reminder.",
 }: {
   disabled: boolean;
