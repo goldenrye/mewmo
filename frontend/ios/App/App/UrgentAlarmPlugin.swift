@@ -10,6 +10,12 @@ private struct UrgentMetadata: AlarmMetadata {}
 private struct AlarmRecord: Codable {
     let fingerprint: String
     let fireAt: Double
+    let soundName: String?
+
+    func keepUnchanged(exists: Bool, alerting: Bool, now: Double, sound: String, force: Bool) -> Bool {
+        if exists { return soundName == sound || alerting || fireAt <= now }
+        return !force
+    }
 }
 
 private struct AlarmRegistry: Codable {
@@ -22,6 +28,7 @@ private struct AlarmRegistry: Codable {
 @MainActor
 private final class UrgentAlarmStore {
     private let key = "mewmo.urgent-alarms.v1"
+    private let soundName = "traditional-alarm.wav"
     private let manager = AlarmManager.shared
     private var registry: AlarmRegistry
     private var failures: [String: String] = [:]
@@ -152,8 +159,14 @@ private final class UrgentAlarmStore {
             let fingerprint = SHA256.hash(data: Data("\(item.fireAt)\n\(item.title)".utf8))
                 .map { String(format: "%02x", $0) }.joined()
             let unchanged = registry.records[item.key]?.fingerprint == fingerprint
-            // Do not recreate an unchanged alarm that the user dismissed in system UI.
-            if unchanged && (activeIds.contains(item.key) || call.getBool("force") != true) { continue }
+            let existingAlarm = alarms.first { $0.id == item.id }
+            // Update the sound on future alarms without restarting ringing or dismissed alarms.
+            if unchanged && registry.records[item.key]?.keepUnchanged(
+                exists: existingAlarm != nil, alerting: existingAlarm?.state == .alerting,
+                now: Date().timeIntervalSince1970, sound: soundName,
+                force: call.getBool("force") == true) == true {
+                continue
+            }
             if item.fireAt <= Date().timeIntervalSince1970 {
                 // Do not stop an already-alerting, unchanged alarm on a routine refresh.
                 if !unchanged && activeIds.contains(item.key) { try manager.cancel(id: item.id) }
@@ -176,9 +189,10 @@ private final class UrgentAlarmStore {
                     metadata: UrgentMetadata(), tintColor: Color(red: 0.52, green: 0.40, blue: 0.65))
                 let configuration = AlarmManager.AlarmConfiguration<UrgentMetadata>.alarm(
                     schedule: .fixed(Date(timeIntervalSince1970: item.fireAt)),
-                    attributes: attributes, sound: .default)
+                    attributes: attributes, sound: .named(soundName))
                 _ = try await manager.schedule(id: item.id, configuration: configuration)
-                registry.records[item.key] = AlarmRecord(fingerprint: fingerprint, fireAt: item.fireAt)
+                registry.records[item.key] = AlarmRecord(
+                    fingerprint: fingerprint, fireAt: item.fireAt, soundName: soundName)
                 try persist()
             } catch AlarmManager.AlarmError.maximumLimitReached {
                 failures[item.key] = "limit"

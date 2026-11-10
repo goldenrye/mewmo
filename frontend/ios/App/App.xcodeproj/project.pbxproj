@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+                FA1A00020000000000000001 /* traditional-alarm.wav in Resources */ = {isa = PBXBuildFile; fileRef = FA1A00020000000000000002 /* traditional-alarm.wav */; };
                 FA1A00010000000000000001 /* UrgentAlarmPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1A00010000000000000002 /* UrgentAlarmPlugin.swift */; };
                 F5EEC0010000000000000001 /* SpeechPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5EEC0010000000000000002 /* SpeechPlugin.swift */; };
                 F1A180000000000000000001 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = F1A180000000000000000002 /* InfoPlist.strings */; };
@@ -23,6 +24,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+                FA1A00020000000000000002 /* traditional-alarm.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = "traditional-alarm.wav"; sourceTree = "<group>"; };
                 FA1A00010000000000000002 /* UrgentAlarmPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UrgentAlarmPlugin.swift; sourceTree = "<group>"; };
                 F5EEC0010000000000000002 /* SpeechPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechPlugin.swift; sourceTree = "<group>"; };
                 F1A180000000000000000003 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
@@ -79,6 +81,7 @@
                                 FFACE0010000000000000002 /* BiometricSessionPlugin.swift */,
                                 F5EEC0010000000000000002 /* SpeechPlugin.swift */,
                                 FA1A00010000000000000002 /* UrgentAlarmPlugin.swift */,
+                                FA1A00020000000000000002 /* traditional-alarm.wav */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
 				504EC30E1FED79650016851F /* Assets.xcassets */,
 				504EC3101FED79650016851F /* LaunchScreen.storyboard */,
@@ -159,6 +162,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+                                FA1A00020000000000000001 /* traditional-alarm.wav in Resources */,
 				504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */,
                                 F1A180000000000000000001 /* InfoPlist.strings in Resources */,
 				50B271D11FEDC1A000F3C39B /* public in Resources */,
