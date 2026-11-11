@@ -61,6 +61,12 @@ export type Note = {
   created_at: string;
   updated_at: string;
 };
+export type NoteDraft = Pick<Note, "title" | "body"> & {
+  source: "file";
+  interpretation: "local" | "ai";
+  warnings: string[];
+  duplicates: string[];
+};
 export type NoteResults = {
   items: Note[];
   total: number;

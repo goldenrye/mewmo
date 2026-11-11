@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Bell, Check, X } from "lucide-react";
 import { api } from "./api";
 import { messageText, t } from "./i18n";
-import type { Note } from "./types";
+import type { Note, NoteDraft } from "./types";
 
 export function NoteEditor({
   initial,
@@ -11,7 +11,7 @@ export function NoteEditor({
   onDeleted,
   onReminder,
 }: {
-  initial: Pick<Note, "title" | "body"> & Partial<Note>;
+  initial: Pick<Note, "title" | "body"> & Partial<Note> & Partial<NoteDraft>;
   onClose: () => void;
   onSaved: (note: Note) => void;
   onDeleted: () => void;
@@ -95,6 +95,38 @@ export function NoteEditor({
         </div>
         {!initial.id && (
           <p className="muted">{t("Nothing is saved until you confirm.")}</p>
+        )}
+        {!initial.id && initial.source === "file" && (
+          <section className="note-import-details">
+            <p className="muted small">
+              {t(
+                initial.interpretation === "ai"
+                  ? "AI-assisted import"
+                  : "Local import",
+              )}
+            </p>
+            {initial.warnings
+              ?.filter(
+                (warning) =>
+                  warning.startsWith("This note exceeds") ||
+                  warning.startsWith("Possible duplicate:") ||
+                  warning.startsWith("AI assistance was unavailable") ||
+                  warning.startsWith("Image analysis was unavailable"),
+              )
+              .map((warning) => (
+                <p className="notice" role="status" key={warning}>
+                  {messageText(warning)}
+                </p>
+              ))}
+            <details className="disclosure">
+              <summary>{t("Extraction details")}</summary>
+              {initial.warnings?.map((warning) => (
+                <p className="muted small" key={warning}>
+                  {messageText(warning)}
+                </p>
+              ))}
+            </details>
+          </section>
         )}
         {editing ? (
           <>

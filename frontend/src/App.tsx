@@ -53,6 +53,7 @@ import { Editor } from "./Editor";
 import { AccountSettings } from "./AccountSettings";
 import { VoiceInput } from "./VoiceInput";
 import { Notes } from "./Notes";
+import { ImportImageConsent } from "./ImportImageConsent";
 import {
   clearDisplayedNotifications,
   enableNotifications,
@@ -1100,6 +1101,7 @@ function Workspace({
           {page === "overview" && homeView === "notes" && (
             <Notes
               blocked={!!draft || !!selected}
+              modelSettings={modelSettings}
               onReminder={(note) => {
                 setEditId(undefined);
                 setDraft({
@@ -1199,42 +1201,12 @@ function Workspace({
                     )}
                   </p>
                 )}
-                {modelSettings?.available &&
-                  modelSettings.enabled &&
-                  modelSettings.allow_images && (
-                    <label className="ai-toggle">
-                      <input
-                        type="checkbox"
-                        checked={imageAI}
-                        disabled={parsing}
-                        onChange={(event) => setImageAI(event.target.checked)}
-                      />
-                      <span>
-                        {t(
-                          (modelSettings.models?.length ?? 1) > 1
-                            ? "Send document images to my configured AI models for this import"
-                            : "Send document images to my AI provider for this import",
-                        )}
-                        <small className="image-model-chain">
-                          {t(
-                            "AI already reads extracted text. This also shares the images.",
-                          )}
-                        </small>
-                        {(modelSettings.models?.length ?? 0) > 1 && (
-                          <small className="image-model-chain">
-                            {t("Tried in order: {models}", {
-                              models: modelSettings
-                                .models!.map(
-                                  (model) =>
-                                    `${model.provider} / ${model.model}`,
-                                )
-                                .join(" → "),
-                            })}
-                          </small>
-                        )}
-                      </span>
-                    </label>
-                  )}
+                <ImportImageConsent
+                  settings={modelSettings}
+                  checked={imageAI}
+                  disabled={parsing}
+                  onChange={setImageAI}
+                />
                 {parsing && (
                   <p className="small muted" role="status">
                     {t(

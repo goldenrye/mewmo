@@ -91,7 +91,8 @@ for (const lang of ["en", "zh-CN"]) {
       : "Living room floor: 12500 mm by 6400 mm.";
     await page
       .getByRole("button", {
-        name: zh ? "通过语音添加笔记" : "Add a note by audio",
+        name: zh ? "语音输入" : "Voice input",
+        exact: true,
       })
       .click();
     await holdSpeech(page, zh ? "按住说话" : "Hold to speak");
@@ -229,7 +230,7 @@ test("switching capture modes cancels microphone and stale recognition", async (
   page,
 }) => {
   await setup(page);
-  await page.getByRole("button", { name: "Add a note by audio" }).click();
+  await page.getByRole("button", { name: "Voice input", exact: true }).click();
   await holdSpeech(page);
   await say(page, "Unsaved note content");
   await page
@@ -245,7 +246,7 @@ test("switching capture modes cancels microphone and stale recognition", async (
   ).toHaveValue("");
   await page.getByRole("button", { name: "Write a note", exact: true }).click();
   await expect(page.getByLabel("Note text")).toHaveValue("");
-  await page.getByRole("button", { name: "Add a note by audio" }).click();
+  await page.getByRole("button", { name: "Voice input", exact: true }).click();
   await holdSpeech(page);
   await say(page, "Another private transcript");
   await page
@@ -329,7 +330,7 @@ test("notes fit narrow layouts and speech keeps the main text visible", async ({
     ).toBe(true);
   }
   await page.setViewportSize({ width: 320, height: 740 });
-  await page.getByRole("button", { name: "Add a note by audio" }).click();
+  await page.getByRole("button", { name: "Voice input", exact: true }).click();
   await holdSpeech(page);
   await say(page, "Floor size is 20 square metres");
   const box = (await page.getByLabel("Note text").boundingBox())!;

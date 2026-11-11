@@ -498,7 +498,8 @@ def test_redaction_preserves_dates_and_amounts_but_not_account_numbers():
         ),
     ],
 )
-def test_provider_requests_use_fixed_hosts_no_tools_or_query_keys(provider, host, response):
+@pytest.mark.parametrize("output_tokens", [1600, 6000])
+def test_provider_requests_use_fixed_hosts_no_tools_or_query_keys(provider, host, response, output_tokens):
     real_client = httpx.Client
     requests = []
 
@@ -512,18 +513,31 @@ def test_provider_requests_use_fixed_hosts_no_tools_or_query_keys(provider, host
 
     with patch("app.model_provider.httpx.Client", side_effect=client_factory):
         assert json.loads(
-            request_model(provider, "example-model", KEY, "system", "prompt", ["aW1hZ2U="])
+            request_model(
+                provider,
+                "example-model",
+                KEY,
+                "system",
+                "prompt",
+                ["aW1hZ2U="],
+                max_output_tokens=output_tokens,
+            )
         ) == {"ok": True}
     request = requests[0]
     assert request.url.host == host and request.url.scheme == "https"
     assert KEY not in str(request.url) and KEY not in request.content.decode()
     assert "tools" not in request.content.decode()
     assert "aW1hZ2U=" in request.content.decode()
+    body = json.loads(request.content)
+    if provider == "openai":
+        assert body["max_completion_tokens"] == output_tokens
+    elif provider == "gemini":
+        assert body["generationConfig"]["maxOutputTokens"] == output_tokens
+    else:
+        assert body["max_tokens"] == output_tokens
     if provider == "doubao":
-        body = json.loads(request.content)
         assert request.url.path == "/api/v3/chat/completions"
         assert request.headers["Authorization"] == f"Bearer {KEY}"
-        assert body["max_tokens"] == 1600
         assert body["thinking"] == {"type": "disabled"}
         assert body["response_format"] == {"type": "json_object"}
         assert "max_completion_tokens" not in body and "store" not in body

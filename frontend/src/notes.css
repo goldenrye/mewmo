@@ -58,6 +58,13 @@
 .note-title {
   overflow-wrap: anywhere;
 }
+.note-import-details {
+  margin-bottom: 16px;
+  overflow-wrap: anywhere;
+}
+.note-import-details .notice {
+  margin: 10px 0;
+}
 .note-dialog textarea {
   width: 100%;
   min-width: 0;

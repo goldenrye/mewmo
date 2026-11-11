@@ -479,6 +479,18 @@
   "Off by default for each reminder. Enable only the alarms you need. Alarm access is separate from push notifications.": "每条提醒默认关闭紧急闹钟，请按需开启。闹钟权限与推送通知权限相互独立。",
   "Web-created urgent reminders are not iPhone alarms until this phone syncs with alarm access enabled.": "网页创建的紧急提醒，只有在此 iPhone 启用闹钟权限并同步后才会成为手机闹钟。",
   "Requires iOS 26+, alarm permission, and confirmation that this iPhone scheduled it. Web and older iPhones use ordinary notifications only.": "需要 iOS 26 或更新版本、闹钟权限，以及此 iPhone 已成功设置的确认。网页和旧版 iPhone 仅使用普通通知。",
+  "Import note": "导入笔记",
+  "PDF or image. Review the text before saving.": "支持 PDF 或图片，保存前请核对文字。",
+  "AI suggests a title from extracted text. Image sharing is optional.": "AI 根据提取的文字建议标题，图片分享需另行授权。",
+  "AI-assisted import": "AI 辅助导入",
+  "Local import": "本地提取",
+  "Review the imported text. OCR can make mistakes. The original file has been discarded.": "请核对导入的文字，OCR 可能有误。原文件已丢弃。",
+  "This note exceeds 10,000 characters. Only the first part is included; import the rest separately.": "笔记超过 10,000 字符，仅保留前半部分，请分次导入剩余内容。",
+  "Account and card numbers are redacted where recognized. Check for sensitive details before saving.": "已识别的账号和卡号会脱敏，保存前请检查是否还有敏感信息。",
+  "AI suggested the title. The locally extracted note text is unchanged.": "AI 建议了标题，本地提取的笔记正文未改写。",
+  "AI transcribed this note from images. Review the full text for missing or incorrect details.": "AI 从图片转录了笔记，请通读检查遗漏或错误。",
+  "Image analysis was unavailable. Review the local text. Images may have been sent to your configured providers.": "图片分析不可用，请核对本地提取的文字。图片可能已发送给你配置的模型服务商。",
+  "Possible duplicate: a saved note has the same text.": "可能重复：已有笔记包含相同正文。",
   "Doubao (Volcengine Ark)": "豆包（火山方舟）",
   "Use your Volcengine Ark API key and a Model ID or Endpoint ID (ep-...) from the Beijing region. Image analysis requires a vision-capable model.": "请使用火山方舟 API 密钥，以及北京地域的模型 ID 或接入点 ID（ep-...）。图片分析需要支持视觉的模型。"
 }

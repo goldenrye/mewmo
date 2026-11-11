@@ -5,19 +5,23 @@ import {
   ChevronRight,
   NotebookPen,
   Search,
+  Upload,
 } from "lucide-react";
 import { api } from "./api";
 import { messageText, t } from "./i18n";
 import { NoteEditor } from "./NoteEditor";
 import { VoiceInput } from "./VoiceInput";
-import type { Note, NoteResults } from "./types";
+import { ImportImageConsent } from "./ImportImageConsent";
+import type { ModelSettings, Note, NoteDraft, NoteResults } from "./types";
 import "./notes.css";
 
 export function Notes({
   blocked,
+  modelSettings,
   onReminder,
 }: {
   blocked: boolean;
+  modelSettings: ModelSettings | null;
   onReminder: (note: Note) => void;
 }) {
   const [mode, setMode] = useState<"write" | "find">("write");
@@ -30,13 +34,74 @@ export function Notes({
   const [voiceBusy, setVoiceBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [importError, setImportError] = useState("");
+  const [importing, setImporting] = useState(false);
+  const [imageAI, setImageAI] = useState(false);
+  const [dragging, setDragging] = useState(false);
   const [editor, setEditor] = useState<
-    (Pick<Note, "title" | "body"> & Partial<Note>) | null
+    (Pick<Note, "title" | "body"> & Partial<Note> & Partial<NoteDraft>) | null
   >(null);
   const request = useRef(0);
+  const file = useRef<HTMLInputElement>(null);
+  const uploading = useRef(false);
   const input = useRef<HTMLTextAreaElement>(null);
   const text = mode === "write" ? noteText : query;
   const setText = mode === "write" ? setNoteText : setQuery;
+
+  useEffect(() => {
+    setImageAI(false);
+  }, [modelSettings, mode]);
+
+  async function importFile(value?: File) {
+    if (file.current) file.current.value = "";
+    if (
+      !value ||
+      busy ||
+      voiceBusy ||
+      blocked ||
+      editor ||
+      uploading.current ||
+      mode !== "write"
+    )
+      return;
+    const shareImages = imageAI;
+    setImageAI(false);
+    setImportError("");
+    setMessage("");
+    if (value.size > 12 * 1024 * 1024) {
+      setImportError("Please choose a file smaller than 12 MB.");
+      return;
+    }
+    const id = ++request.current;
+    uploading.current = true;
+    setBusy(true);
+    setImporting(true);
+    try {
+      const params = new URLSearchParams();
+      if (shareImages && modelSettings?.enabled && modelSettings.allow_images) {
+        params.set("use_image_ai", "true");
+        params.set("image_provider", modelSettings.provider);
+        if (modelSettings.revision !== undefined)
+          params.set("image_revision", String(modelSettings.revision));
+        if (modelSettings.image_chain_token)
+          params.set("image_chain", modelSettings.image_chain_token);
+      }
+      const draft = await api<NoteDraft>(`/notes/drafts/file?${params}`, {
+        method: "POST",
+        body: value,
+        headers: { "Content-Type": "application/octet-stream" },
+      });
+      if (id === request.current) setEditor(draft);
+    } catch (reason) {
+      if (id === request.current) setImportError((reason as Error).message);
+    } finally {
+      uploading.current = false;
+      if (id === request.current) {
+        setBusy(false);
+        setImporting(false);
+      }
+    }
+  }
 
   async function load(search: string | null, nextOffset = 0) {
     const id = ++request.current;
@@ -112,7 +177,20 @@ export function Notes({
   }
   return (
     <div className="notes-workspace">
-      <section className="capture-card">
+      <section
+        className={`capture-card ${dragging ? "dragging" : ""}`}
+        onDragOver={(event) => {
+          event.preventDefault();
+          if (mode === "write" && !busy && !voiceBusy && !blocked)
+            setDragging(true);
+        }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={(event) => {
+          event.preventDefault();
+          setDragging(false);
+          void importFile(event.dataTransfer.files[0]);
+        }}
+      >
         <div className="tabs note-modes" aria-label={t("Note action")}>
           <button
             className={mode === "write" ? "active" : ""}
@@ -120,6 +198,7 @@ export function Notes({
             onClick={() => {
               setMode("write");
               setError("");
+              setImportError("");
             }}
             disabled={busy || blocked}
           >
@@ -131,6 +210,7 @@ export function Notes({
             onClick={() => {
               setMode("find");
               setError("");
+              setImportError("");
             }}
             disabled={busy || blocked}
           >
@@ -190,7 +270,7 @@ export function Notes({
           disabled={busy || !!editor || blocked}
           aiEnabled={false}
           triggerLabel={
-            mode === "write" ? "Add a note by audio" : "Find notes by audio"
+            mode === "write" ? "Voice input" : "Find notes by audio"
           }
           unavailableLabel="Speech recognition is unavailable here. Use keyboard dictation or type your text."
           onBusy={setVoiceBusy}
@@ -199,12 +279,74 @@ export function Notes({
             setText("");
             setError("");
             setMessage("");
+            setImportError("");
             input.current?.blur();
             input.current
               ?.closest(".capture-card")
               ?.scrollIntoView({ block: "start" });
           }}
-        />
+        >
+          {mode === "write" && (
+            <button
+              type="button"
+              disabled={busy || voiceBusy || blocked || !!editor}
+              onClick={() => file.current?.click()}
+            >
+              <Upload size={15} />
+              {t("Import note")}
+            </button>
+          )}
+        </VoiceInput>
+        {mode === "write" && (
+          <>
+            <input
+              ref={file}
+              type="file"
+              hidden
+              accept="application/pdf,image/*"
+              onChange={(event) => void importFile(event.target.files?.[0])}
+            />
+            <p className="small muted">
+              {t("PDF or image. Review the text before saving.")}
+            </p>
+            {modelSettings?.enabled && (
+              <p className="small muted">
+                {t(
+                  "AI suggests a title from extracted text. Image sharing is optional.",
+                )}
+              </p>
+            )}
+            <ImportImageConsent
+              settings={modelSettings}
+              checked={imageAI}
+              disabled={busy || voiceBusy || blocked || !!editor}
+              onChange={setImageAI}
+            />
+            {importing && (
+              <p role="status" className="small muted">
+                {t("Preparing your draft. Scanned files may take a moment…")}
+              </p>
+            )}
+            {importError && (
+              <div className="import-error" role="alert">
+                <span>{messageText(importError)}</span>
+                <button
+                  className="text-button"
+                  disabled={busy || voiceBusy || blocked}
+                  onClick={() => {
+                    setImportError("");
+                    setEditor({
+                      title: noteText.trim().split("\n")[0].slice(0, 80),
+                      body: noteText,
+                    });
+                  }}
+                >
+                  {t("Enter manually")}
+                </button>
+              </div>
+            )}
+          </>
+        )}
       </section>
       {error && (
         <div role="alert" className="error">
@@ -235,7 +377,7 @@ export function Notes({
             </button>
           )}
         </div>
-        {busy && <p role="status">{t("Loading...")}</p>}
+        {busy && !importing && <p role="status">{t("Loading...")}</p>}
         {result?.warning && (
           <p role="status" className="notice">
             {messageText(result.warning)}

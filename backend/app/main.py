@@ -1,6 +1,5 @@
 import hashlib
 import re
-import threading
 from datetime import UTC, date, datetime
 from zoneinfo import ZoneInfo
 
@@ -19,8 +18,8 @@ from .ai_assistance import AI_FAILURE, assist_draft
 from .auth import client_key_hash, require_user
 from .config import settings
 from .database import session
+from .file_imports import ocr_slots, read_upload, validate_image_consent
 from .file_reminders import parse_file
-from .model_settings import image_chain_token
 from .model_settings import router as model_settings_router
 from .models import Delivery, Device, Item, ModelPreference, Reminder, User, now
 from .notes import router as notes_router
@@ -44,7 +43,6 @@ app.add_middleware(
         "X-Account-ID",
     ],
 )
-ocr_slots = threading.BoundedSemaphore(2)
 
 
 @app.exception_handler(RequestValidationError)
@@ -195,22 +193,9 @@ async def file_draft(
     if not ocr_slots.acquire(blocking=False):
         raise HTTPException(429, "Two imports are already being parsed. Please try again shortly.")
     try:
-        data = bytearray()
-        async for chunk in request.stream():
-            data.extend(chunk)
-            if len(data) > 12 * 1024 * 1024:
-                raise HTTPException(413, "Files must be no larger than 12 MB.")
+        data = await read_upload(request)
         preference = db.get(ModelPreference, user.id)
-        if use_image_ai and not (preference and preference.enabled and preference.allow_images):
-            raise HTTPException(400, "Enable image analysis in AI settings before using it for an import.")
-        if use_image_ai and image_provider != preference.provider:
-            raise HTTPException(400, "AI settings changed. Review them and opt in to image analysis again.")
-        if use_image_ai and (
-            (preference.fallbacks and image_chain != image_chain_token(preference))
-            or (image_chain is not None and image_chain != image_chain_token(preference))
-            or (image_revision is not None and image_revision != preference.revision)
-        ):
-            raise HTTPException(400, "AI settings changed. Review them and opt in to image analysis again.")
+        validate_image_consent(preference, use_image_ai, image_provider, image_revision, image_chain)
         image_data = bytes(data) if use_image_ai else None
         extracted, draft, failure = "", None, None
         try:

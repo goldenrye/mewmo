@@ -1,5 +1,5 @@
-"NSCameraUsageDescription" = "拍摄账单或提醒通知以生成草稿，原始照片会在解析后丢弃。";
-"NSPhotoLibraryUsageDescription" = "选择账单或提醒图片以生成草稿。";
+"NSCameraUsageDescription" = "拍照以生成提醒或笔记草稿，原始照片会在解析后丢弃。";
+"NSPhotoLibraryUsageDescription" = "选择图片以生成提醒或笔记草稿。";
 "NSFaceIDUsageDescription" = "使用面容 ID 在此 iPhone 上安全登录你的 Mewmo 账户。";
 "NSMicrophoneUsageDescription" = "说出提醒、笔记或笔记搜索内容，在保存或搜索前核对文字。Mewmo 不保存录音。";
 "NSAlarmKitUsageDescription" = "允许你选择的紧急提醒在此 iPhone 上以闹钟响铃，不受静音和专注模式影响。";

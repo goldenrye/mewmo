@@ -13,7 +13,15 @@ class ModelUnavailable(ValueError):
 
 
 def request_model(
-    provider: str, model: str, key: str, system: str, prompt: str, images=(), *, timeout=30
+    provider: str,
+    model: str,
+    key: str,
+    system: str,
+    prompt: str,
+    images=(),
+    *,
+    timeout=30,
+    max_output_tokens=1600,
 ) -> str:
     text = {"type": "text", "text": prompt}
     if provider in ("openai", "doubao"):
@@ -36,10 +44,10 @@ def request_model(
             "response_format": {"type": "json_object"},
         }
         if provider == "openai":
-            body.update(max_completion_tokens=1600, store=False)
+            body.update(max_completion_tokens=max_output_tokens, store=False)
         else:
             # Ark uses its own output budget and reasoning controls, not OpenAI's store option.
-            body.update(max_tokens=1600, thinking={"type": "disabled"})
+            body.update(max_tokens=max_output_tokens, thinking={"type": "disabled"})
     elif provider == "anthropic":
         url = "https://api.anthropic.com/v1/messages"
         headers = {"x-api-key": key, "anthropic-version": "2023-06-01"}
@@ -54,7 +62,7 @@ def request_model(
             "model": model,
             "system": system,
             "messages": [{"role": "user", "content": content}],
-            "max_tokens": 1600,
+            "max_tokens": max_output_tokens,
         }
     elif provider == "gemini":
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
@@ -70,7 +78,10 @@ def request_model(
                     ],
                 }
             ],
-            "generationConfig": {"maxOutputTokens": 1600, "responseMimeType": "application/json"},
+            "generationConfig": {
+                "maxOutputTokens": max_output_tokens,
+                "responseMimeType": "application/json",
+            },
         }
     else:
         raise ModelUnavailable()

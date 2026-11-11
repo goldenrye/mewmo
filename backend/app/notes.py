@@ -1,14 +1,18 @@
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from .auth import require_user
 from .database import session
+from .file_imports import ocr_slots, read_upload, validate_image_consent
 from .models import ModelPreference, Note, User
+from .note_imports import NoteDraft, import_note
 from .note_search import normalize, search_terms
+from .parsing import ParseFailure
 
 router = APIRouter(prefix="/api/notes")
 
@@ -58,6 +62,37 @@ def owned_note(db: Session, user_id: str, note_id: str, lock=False):
 def check_version(note: Note, version: int):
     if note.version != version:
         raise HTTPException(409, "This note changed on another device. Close and reopen it before editing.")
+
+
+@router.post("/drafts/file", response_model=NoteDraft)
+async def file_note_draft(
+    request: Request,
+    use_image_ai: bool = False,
+    image_provider: str | None = None,
+    image_revision: int | None = None,
+    image_chain: str | None = None,
+    db: Session = Depends(session),
+    user: User = Depends(require_user),
+):
+    if not ocr_slots.acquire(blocking=False):
+        raise HTTPException(429, "Two imports are already being parsed. Please try again shortly.")
+    data = bytearray()
+    try:
+        preference = db.get(ModelPreference, user.id)
+        validate_image_consent(preference, use_image_ai, image_provider, image_revision, image_chain)
+        data = await read_upload(request)
+        draft = await run_in_threadpool(import_note, bytes(data), preference, use_image_ai)
+        draft.duplicates = list(
+            db.scalars(select(Note.id).where(Note.user_id == user.id, Note.body == draft.body).limit(20))
+        )
+        if draft.duplicates:
+            draft.warnings.append("Possible duplicate: a saved note has the same text.")
+        return draft
+    except ParseFailure as error:
+        raise HTTPException(422, str(error))
+    finally:
+        data.clear()
+        ocr_slots.release()
 
 
 @router.get("")
