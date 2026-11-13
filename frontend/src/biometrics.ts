@@ -8,6 +8,10 @@ export type BiometricStatus = {
   enabled: boolean;
   label: "Face ID" | "Touch ID";
 };
+export type BiometricLoginStage = "unlocking" | "verifying";
+
+const verificationTimeout =
+  "Session verification timed out. Check your connection, then try again or use your password.";
 
 interface BiometricBridge {
   status(options: { server: string }): Promise<BiometricStatus>;
@@ -77,10 +81,13 @@ export async function enableBiometrics(): Promise<void> {
   });
 }
 
-export async function signInWithBiometrics(): Promise<AuthResult> {
+export async function signInWithBiometrics(
+  onProgress?: (stage: BiometricLoginStage) => void,
+): Promise<AuthResult> {
   if (!supportsBiometrics())
     throw new Error("Use your password to sign in on this device.");
   const version = currentSession().version;
+  onProgress?.("unlocking");
   await mutations.catch(() => {});
   const saved = await bridge.restore({
     server: apiBase,
@@ -93,9 +100,27 @@ export async function signInWithBiometrics(): Promise<AuthResult> {
   setToken(saved.token, saved.userId);
   const restoredVersion = currentSession().version;
   let mismatchedAccount = false;
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     // A successful local scan is not enough: the server must accept the session.
-    const account = await api<Account>("/auth/me");
+    onProgress?.("verifying");
+    // Race as well as abort: a stalled WebView request must not trap the login UI.
+    const deadline = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        reject(new Error(verificationTimeout));
+        controller.abort();
+      }, 10_000);
+    });
+    const account = await Promise.race([
+      api<Account>("/auth/me", {
+        signal: controller.signal,
+        cache: "no-store",
+      }),
+      deadline,
+    ]);
+    if (currentSession().version !== restoredVersion)
+      throw new Error("Account changed. Sign-in cancelled.");
     if (account.user.id !== saved.userId) {
       mismatchedAccount = true;
       throw new Error("Account changed. Please sign in with your password.");
@@ -114,5 +139,7 @@ export async function signInWithBiometrics(): Promise<AuthResult> {
     }
     // Connectivity failures leave the protected Keychain session available for retry.
     throw error;
+  } finally {
+    clearTimeout(timer);
   }
 }

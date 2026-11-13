@@ -47,6 +47,7 @@ import {
   biometricStatus,
   clearBiometrics,
   signInWithBiometrics,
+  type BiometricLoginStage,
   type BiometricStatus,
 } from "./biometrics";
 import { Editor } from "./Editor";
@@ -110,6 +111,8 @@ function Login({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [biometric, setBiometric] = useState<BiometricStatus | null>(null);
+  const [biometricStage, setBiometricStage] =
+    useState<BiometricLoginStage | null>(null);
   useEffect(() => {
     let live = true;
     void biometricStatus()
@@ -126,11 +129,18 @@ function Login({
     setBusy(true);
     setError("");
     try {
-      onLogin(await signInWithBiometrics());
+      onLogin(await signInWithBiometrics(setBiometricStage));
     } catch (error) {
       setError((error as Error).message);
-      setBiometric(await biometricStatus().catch(() => null));
+      // Do not keep retry/password controls blocked while refreshing native availability.
+      const version = currentSession().version;
+      void biometricStatus()
+        .then((value) => {
+          if (currentSession().version === version) setBiometric(value);
+        })
+        .catch(() => {});
     } finally {
+      setBiometricStage(null);
       setBusy(false);
     }
   }
@@ -199,6 +209,15 @@ function Login({
               <ScanFace size={20} />
               {t("Sign in with {method}", { method: t(biometric.label) })}
             </button>
+          )}
+          {biometricStage && (
+            <p role="status" className="muted small">
+              {t(
+                biometricStage === "verifying"
+                  ? "Checking your session with the server..."
+                  : "Unlocking your saved sign-in...",
+              )}
+            </p>
           )}
           {register && (
             <>

@@ -53,6 +53,7 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   vi.clearAllMocks();
   vi.unstubAllGlobals();
@@ -214,4 +215,124 @@ it("passes the selected language to native setup and unlock prompts", async () =
   auth.setToken(null);
   await biometric.signInWithBiometrics();
   expect(mocks.restore).toHaveBeenCalledWith({ server, language: "zh-CN" });
+});
+
+it("reports native unlock separately and starts the deadline only after it finishes", async () => {
+  vi.useFakeTimers();
+  let unlock!: (value: { token: string; userId: string }) => void;
+  mocks.restore.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        unlock = resolve;
+      }),
+  );
+  const progress = vi.fn();
+  const pending = biometric.signInWithBiometrics(progress);
+  await vi.advanceTimersByTimeAsync(30_000);
+  expect(progress.mock.calls).toEqual([["unlocking"]]);
+  expect(fetch).not.toHaveBeenCalled();
+  unlock({ token: "protected-token", userId: user.id });
+  await pending;
+  expect(progress.mock.calls).toEqual([["unlocking"], ["verifying"]]);
+  expect(vi.getTimerCount()).toBe(0);
+  expect(vi.mocked(fetch).mock.calls[0][1]?.cache).toBe("no-store");
+});
+
+it("aborts a stalled verification after ten seconds without deleting protected credentials", async () => {
+  vi.useFakeTimers();
+  vi.mocked(fetch).mockImplementationOnce(() => new Promise(() => {}));
+  const pending = biometric.signInWithBiometrics();
+  const rejected = expect(pending).rejects.toThrow(
+    "Session verification timed out",
+  );
+  await vi.advanceTimersByTimeAsync(9999);
+  const signal = vi.mocked(fetch).mock.calls[0][1]!.signal!;
+  expect(signal.aborted).toBe(false);
+  await vi.advanceTimersByTimeAsync(1);
+  await rejected;
+  expect(signal.aborted).toBe(true);
+  expect(auth.currentSession().token).toBeNull();
+  expect(mocks.clear).not.toHaveBeenCalled();
+  expect(vi.getTimerCount()).toBe(0);
+  // Retrying performs fresh server verification with the still-protected session.
+  const result = await biometric.signInWithBiometrics();
+  expect(result.user.id).toBe(user.id);
+  expect(mocks.restore).toHaveBeenCalledTimes(2);
+  expect(fetch).toHaveBeenCalledTimes(2);
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+for (const status of [200, 401]) {
+  it(`ignores a late ${status} response after verification times out`, async () => {
+    vi.useFakeTimers();
+    let finish!: (response: Response) => void;
+    vi.mocked(fetch).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const unauthorized = vi.fn();
+    window.addEventListener("mewmo:unauthorized", unauthorized);
+    const pending = biometric.signInWithBiometrics();
+    const rejected = expect(pending).rejects.toThrow(
+      "Session verification timed out",
+    );
+    await vi.advanceTimersByTimeAsync(10_000);
+    await rejected;
+    auth.setToken("bob-token", "bob-id");
+    finish(
+      new Response(
+        JSON.stringify(
+          status === 200 ? { user } : { detail: "Please sign in" },
+        ),
+        { status },
+      ),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    expect(auth.currentSession().token).toBe("bob-token");
+    expect(mocks.clear).not.toHaveBeenCalled();
+    expect(unauthorized).not.toHaveBeenCalled();
+  });
+}
+
+it("does not clear a new account when an older verification times out", async () => {
+  vi.useFakeTimers();
+  vi.mocked(fetch).mockImplementationOnce(() => new Promise(() => {}));
+  const pending = biometric.signInWithBiometrics();
+  const rejected = expect(pending).rejects.toThrow(
+    "Session verification timed out",
+  );
+  await vi.advanceTimersByTimeAsync(0);
+  auth.setToken("bob-token", "bob-id");
+  await vi.advanceTimersByTimeAsync(10_000);
+  await rejected;
+  expect(auth.currentSession().token).toBe("bob-token");
+  expect(mocks.clear).not.toHaveBeenCalled();
+});
+
+it("also times out a response whose headers arrived but body stalled", async () => {
+  vi.useFakeTimers();
+  const response = new Response("{}");
+  vi.spyOn(response, "json").mockImplementationOnce(
+    () => new Promise(() => {}),
+  );
+  vi.mocked(fetch).mockResolvedValueOnce(response);
+  const pending = biometric.signInWithBiometrics();
+  const rejected = expect(pending).rejects.toThrow(
+    "Session verification timed out",
+  );
+  await vi.advanceTimersByTimeAsync(10_000);
+  await rejected;
+  expect(auth.currentSession().token).toBeNull();
+  expect(mocks.clear).not.toHaveBeenCalled();
+});
+
+it("cancels the deadline on success so it cannot clear a later account", async () => {
+  vi.useFakeTimers();
+  await biometric.signInWithBiometrics();
+  auth.setToken("bob-token", "bob-id");
+  await vi.advanceTimersByTimeAsync(20_000);
+  expect(auth.currentSession().token).toBe("bob-token");
+  expect(vi.getTimerCount()).toBe(0);
 });

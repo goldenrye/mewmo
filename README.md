@@ -287,6 +287,8 @@ This is native iPhone sign-in, not browser face recognition or a passkey impleme
 
 The server still validates the session after every unlock. Sessions expire **seven days after password sign-in**, not seven days after enabling Face ID. Expiry/revocation requires password sign-in and enabling Face ID again. Signing out, switching accounts by password, or disabling the feature removes the saved session. Cancelling a scan or losing network connectivity does not bypass authentication; a network failure retains the protected session for retry.
 
+Login shows separate **Unlocking your saved sign-in...** and **Checking your session with the server...** stages. After the Keychain unlock completes, server verification (including reading the response body) is limited to ten seconds. A timeout aborts the request, clears the unverified in-memory session, and restores retry/password controls without deleting the protected Keychain session. Late responses cannot sign in or sign out a newer account. The limit does not interrupt the system Face ID prompt, and a delayed native availability refresh does not block password fallback. This bounds network-related waiting; it does not establish or fix the cause of a slow iPhone network or Keychain operation.
+
 Physical-device release checks:
 - Enable, force-quit/relaunch, unlock successfully, and cancel a scan.
 - Deny Face ID permission, test biometric lockout, and confirm password fallback.
