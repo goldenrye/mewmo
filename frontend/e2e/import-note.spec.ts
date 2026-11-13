@@ -217,6 +217,7 @@ test("note image consent follows model chain and resets after each attempt", asy
   });
   const checkbox = page.locator(".notes-workspace input[type=checkbox]");
   await expect(checkbox).not.toBeChecked();
+  await page.locator(".import-options summary").click();
   await expect(
     page.getByText("Tried in order: openai / first → anthropic / backup"),
   ).toBeVisible();

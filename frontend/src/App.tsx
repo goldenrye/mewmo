@@ -959,7 +959,7 @@ function Workspace({
   );
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${page === "overview" ? "is-overview" : ""}`}>
       <aside className="sidebar">
         <Brand />
         <nav aria-label={t("Main navigation")}>
@@ -1043,49 +1043,42 @@ function Workspace({
         </header>
         <main>
           <AlarmCleanupWarning />
-          <div className="page-heading">
+          <div
+            className={`page-heading ${page === "overview" ? "home-heading" : ""}`}
+          >
             <div>
               <h1>{t(page[0].toUpperCase() + page.slice(1))}</h1>
-              {page === "overview" && homeView === "reminders" && (
-                <p>
-                  {t("{count} open", { count: items.length })}
-                  {overdue.length > 0
-                    ? ` · ${t("{count} overdue", { count: overdue.length })}`
-                    : ""}
-                </p>
-              )}
             </div>
-            {((page === "overview" && homeView === "reminders") ||
-              page === "calendar") && (
+            {page === "calendar" && (
               <button className="primary add-item" onClick={() => newItem()}>
                 <Plus size={20} />
                 {t("Add item")}
               </button>
             )}
+            {page === "overview" && (
+              <div
+                className="segmented home-switch"
+                aria-label={t("Home content")}
+              >
+                <button
+                  className={homeView === "reminders" ? "active" : ""}
+                  aria-pressed={homeView === "reminders"}
+                  disabled={parsing}
+                  onClick={() => setHomeView("reminders")}
+                >
+                  {t("Reminders")}
+                </button>
+                <button
+                  className={homeView === "notes" ? "active" : ""}
+                  aria-pressed={homeView === "notes"}
+                  disabled={parsing}
+                  onClick={() => setHomeView("notes")}
+                >
+                  {t("Notes")}
+                </button>
+              </div>
+            )}
           </div>
-          {page === "overview" && (
-            <div
-              className="segmented home-switch"
-              aria-label={t("Home content")}
-            >
-              <button
-                className={homeView === "reminders" ? "active" : ""}
-                aria-pressed={homeView === "reminders"}
-                disabled={parsing}
-                onClick={() => setHomeView("reminders")}
-              >
-                {t("Reminders")}
-              </button>
-              <button
-                className={homeView === "notes" ? "active" : ""}
-                aria-pressed={homeView === "notes"}
-                disabled={parsing}
-                onClick={() => setHomeView("notes")}
-              >
-                {t("Notes")}
-              </button>
-            </div>
-          )}
           {error && (
             <div className="error global-error" role="alert">
               {messageText(error)}
@@ -1134,11 +1127,20 @@ function Workspace({
               >
                 <div className="capture-heading">
                   <h2>{t("Add a reminder")}</h2>
+                  <button
+                    className="text-button manual-add"
+                    aria-label={t("Add item")}
+                    title={t("Add item")}
+                    onClick={() => newItem()}
+                  >
+                    <Plus size={20} aria-hidden="true" />
+                    <span>{t("Add item")}</span>
+                  </button>
                 </div>
                 <div className="capture-input">
                   <textarea
                     ref={capture}
-                    rows={3}
+                    rows={2}
                     maxLength={4000}
                     aria-label={t("Natural language input")}
                     readOnly={voiceBusy}
@@ -1191,16 +1193,6 @@ function Workspace({
                     {t("Import reminder")}
                   </button>
                 </VoiceInput>
-                <p className="small muted">
-                  {t("PDF or image: bills, appointments, and dated notices.")}
-                </p>
-                {modelSettings?.enabled && (
-                  <p className="small muted">
-                    {t(
-                      "AI-first capture. Local parsing takes over if your models are unavailable.",
-                    )}
-                  </p>
-                )}
                 <ImportImageConsent
                   settings={modelSettings}
                   checked={imageAI}
@@ -1252,6 +1244,11 @@ function Workspace({
                           )
                         : t("Your items")}
                     <span className="count">{visible.length}</span>
+                    {page === "overview" && overdue.length > 0 && (
+                      <span className="overdue-summary">
+                        {t("{count} overdue", { count: overdue.length })}
+                      </span>
+                    )}
                   </h2>
                   <label className="search-box">
                     <Search size={16} />

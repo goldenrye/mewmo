@@ -30,6 +30,8 @@ Capture is AI-first when a user has enabled a model: the first usable model resp
 
 **Parsing never creates items or reminders.** Only a separate item request with `confirmed: true` writes an item. Drafts are neither stored in the database nor cached in browser storage.
 
+The compact Overview places **Reminders / Notes** beside the page title. Manual **Add item** is beside **Add a reminder** (a `+` button on small phones); item and overdue counts sit with the list. Import areas show one **PDF or image / Import options** row. Expand it for limits, privacy guidance, and optional **Share images with AI** consent. A collapsed **AI images on** label keeps active image sharing visible. Text sizes and 44-pixel tap targets are preserved.
+
 ### Notes and Voice Search
 
 Home has a **Reminders / Notes** switch; the existing Calendar, History, Alerts, and Settings navigation stays unchanged. Notes never appear as overdue, in the calendar, or in reminder delivery/history.

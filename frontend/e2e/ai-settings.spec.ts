@@ -258,6 +258,7 @@ test("image analysis is opt-in for each import and resets after use", async ({
   await page.locator('input[type="file"]').setInputFiles(file);
   await expect(page.getByRole("alert")).toContainText("Test import");
   expect(requests[0].searchParams.has("use_image_ai")).toBeFalsy();
+  await page.locator(".import-options summary").click();
   await consent.check();
   await page.locator('input[type="file"]').setInputFiles(file);
   await expect.poll(() => requests.length).toBe(2);
@@ -547,6 +548,7 @@ test("image consent discloses every fallback and sends the chain token", async (
   const consent = page.getByLabel(
     "Send document images to my configured AI models for this import",
   );
+  await page.locator(".import-options summary").click();
   await expect(consent).not.toBeChecked();
   await expect(
     page.getByText(/Tried in order: openai \/ first-model/),
@@ -628,11 +630,12 @@ for (const interpretation of ["ai", "local"]) {
     const before = await page.request
       .get("/api/items")
       .then((response) => response.json());
-    await expect(
-      page.getByText(
-        "AI-first capture. Local parsing takes over if your models are unavailable.",
-      ),
-    ).toBeVisible();
+    const guidance = page.getByText(
+      "AI-first capture. Local parsing takes over if your models are unavailable.",
+    );
+    await expect(guidance).not.toBeVisible();
+    await page.locator(".import-options summary").click();
+    await expect(guidance).toBeVisible();
     await expect(page.getByLabel("Use AI by default")).toHaveCount(0);
     await page
       .getByLabel("Natural language input", { exact: true })

@@ -217,17 +217,10 @@ export function Notes({
             {t("Find notes")}
           </button>
         </div>
-        <p className="muted small">
-          {t(
-            mode === "write"
-              ? "No date, time, or notifications. Just a note."
-              : 'Ask for a topic, like "the notes about the floor".',
-          )}
-        </p>
         <div className="capture-input">
           <textarea
             ref={input}
-            rows={3}
+            rows={2}
             maxLength={mode === "write" ? 10000 : 500}
             aria-label={t(mode === "write" ? "Note text" : "Search notes")}
             value={text}
@@ -306,17 +299,8 @@ export function Notes({
               accept="application/pdf,image/*"
               onChange={(event) => void importFile(event.target.files?.[0])}
             />
-            <p className="small muted">
-              {t("PDF or image. Review the text before saving.")}
-            </p>
-            {modelSettings?.enabled && (
-              <p className="small muted">
-                {t(
-                  "AI suggests a title from extracted text. Image sharing is optional.",
-                )}
-              </p>
-            )}
             <ImportImageConsent
+              kind="note"
               settings={modelSettings}
               checked={imageAI}
               disabled={busy || voiceBusy || blocked || !!editor}
