@@ -56,7 +56,8 @@ def user_json(user: User):
 
 def signed_in(db: Session, user: User, request: Request, response: Response):
     # Switching accounts on an installation detaches its previous notification owner.
-    disable_installation(db, request)
+    # Signing in again as the same user (Face ID, expired session) keeps its devices.
+    disable_installation(db, request, keep_user_id=user.id)
     db.execute(delete(AuthSession).where(AuthSession.expires_at <= now()))
     token = issue_session(db, user.id)
     db.commit()

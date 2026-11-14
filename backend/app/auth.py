@@ -72,13 +72,17 @@ def client_key_hash(request: Request) -> str | None:
     return token_hash(key) if re.fullmatch(r"[0-9a-f]{64}", key) else None
 
 
-def disable_installation(db: Session, request: Request, user_id: str | None = None):
+def disable_installation(
+    db: Session, request: Request, user_id: str | None = None, keep_user_id: str | None = None
+):
     key = client_key_hash(request)
     if not key:
         return
     query = select(Device).where(Device.client_key_hash == key).order_by(Device.id).with_for_update()
     if user_id is not None:
         query = query.where(Device.user_id == user_id)
+    if keep_user_id is not None:
+        query = query.where(Device.user_id != keep_user_id)
     for device in db.scalars(query.execution_options(populate_existing=True)):
         device.active = False
 

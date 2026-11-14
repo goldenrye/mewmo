@@ -58,6 +58,7 @@ import { ImportImageConsent } from "./ImportImageConsent";
 import {
   clearDisplayedNotifications,
   enableNotifications,
+  restoreNotifications,
 } from "./notifications";
 import {
   context,
@@ -728,6 +729,12 @@ function Workspace({
       document.removeEventListener("visibilitychange", resume);
       window.removeEventListener("focus", resume);
     };
+  }, [refresh]);
+  useEffect(() => {
+    // Sign-in on another account or logout disables this installation's push device.
+    void restoreNotifications().then((restored) => {
+      if (restored) void refresh().catch(() => {});
+    });
   }, [refresh]);
   useEffect(() => {
     const id = new URLSearchParams(location.search).get("item");

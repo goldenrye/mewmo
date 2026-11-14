@@ -303,3 +303,18 @@ def test_invite_uses_configured_origin_not_host_header(client, monkeypatch):
     assert response.json()["url"].startswith("https://mewmo.rental-mgmt.us:9443/#invite=")
     monkeypatch.setattr(settings(), "public_web_url", "")
     assert client.post("/api/admin/invitations").status_code == 503
+
+
+def test_same_user_sign_in_keeps_installation_devices(client, bill_input, db):
+    device_id = client.post("/api/devices", json={"platform": "ios", "token": "c" * 64}).json()["id"]
+    login_admin(client)
+    assert db.get(Device, device_id).active
+    item = client.post("/api/items", json=bill_input | {"rules": []}).json()
+    stamp = now()
+    reminder = Reminder(item_id=item["id"], rule_key="test", fire_at=stamp, next_attempt_at=stamp)
+    db.add(reminder)
+    db.commit()
+    sent = []
+    dispatch_one(db, reminder.id, lambda device, _: sent.append(device.id), stamp)
+    assert sent == [device_id]
+    assert reminder.status == "sent"

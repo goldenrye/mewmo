@@ -16,6 +16,33 @@ export async function clearDisplayedNotifications() {
   }
 }
 
+// Re-registers an installation that already granted permission, without prompting.
+// Logging out disables this installation's devices; this restores them after sign-in.
+export async function restoreNotifications(): Promise<boolean> {
+  try {
+    if (Capacitor.isNativePlatform()) {
+      const permission = await PushNotifications.checkPermissions();
+      if (permission.receive !== "granted") return false;
+      await registerNative();
+      return true;
+    }
+    if (
+      !("serviceWorker" in navigator) ||
+      !("PushManager" in window) ||
+      Notification.permission !== "granted"
+    )
+      return false;
+    const registration = await navigator.serviceWorker.getRegistration();
+    const subscription = await registration?.pushManager.getSubscription();
+    if (!subscription) return false;
+    await registerWeb(subscription);
+    return true;
+  } catch {
+    // Best effort: Settings → Enable on this device remains available.
+    return false;
+  }
+}
+
 export async function enableNotifications(vapid: string) {
   if (Capacitor.isNativePlatform()) {
     let permission = await PushNotifications.checkPermissions();
@@ -25,53 +52,7 @@ export async function enableNotifications(vapid: string) {
       throw new Error(
         "Notifications are disabled. Enable them in iPhone Settings.",
       );
-    await new Promise<void>((resolve, reject) => {
-      let success: { remove: () => Promise<void> } | undefined;
-      let failure: { remove: () => Promise<void> } | undefined;
-      const clean = () => {
-        clearTimeout(timer);
-        void success?.remove();
-        void failure?.remove();
-      };
-      const timer = setTimeout(() => {
-        clean();
-        reject(new Error("APNs registration timed out. Please retry."));
-      }, 20000);
-      void (async () => {
-        success = await PushNotifications.addListener(
-          "registration",
-          (token) => {
-            void api("/devices", {
-              method: "POST",
-              body: JSON.stringify({ platform: "ios", token: token.value }),
-            })
-              .then(() => {
-                clean();
-                resolve();
-              })
-              .catch((error) => {
-                clean();
-                reject(error);
-              });
-          },
-        );
-        failure = await PushNotifications.addListener(
-          "registrationError",
-          () => {
-            clean();
-            reject(
-              new Error(
-                "APNs registration failed. Check signing and the push entitlement.",
-              ),
-            );
-          },
-        );
-        await PushNotifications.register();
-      })().catch((error) => {
-        clean();
-        reject(error);
-      });
-    });
+    await registerNative();
     return;
   }
   if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
@@ -96,11 +77,59 @@ export async function enableNotifications(vapid: string) {
       userVisibleOnly: true,
       applicationServerKey: key,
     }));
+  await registerWeb(subscription);
+}
+
+async function registerWeb(subscription: PushSubscription) {
   await api("/devices", {
     method: "POST",
     body: JSON.stringify({
       platform: "web",
       subscription: subscription.toJSON(),
     }),
+  });
+}
+
+function registerNative() {
+  return new Promise<void>((resolve, reject) => {
+    let success: { remove: () => Promise<void> } | undefined;
+    let failure: { remove: () => Promise<void> } | undefined;
+    const clean = () => {
+      clearTimeout(timer);
+      void success?.remove();
+      void failure?.remove();
+    };
+    const timer = setTimeout(() => {
+      clean();
+      reject(new Error("APNs registration timed out. Please retry."));
+    }, 20000);
+    void (async () => {
+      success = await PushNotifications.addListener("registration", (token) => {
+        void api("/devices", {
+          method: "POST",
+          body: JSON.stringify({ platform: "ios", token: token.value }),
+        })
+          .then(() => {
+            clean();
+            resolve();
+          })
+          .catch((error) => {
+            clean();
+            reject(error);
+          });
+      });
+      failure = await PushNotifications.addListener("registrationError", () => {
+        clean();
+        reject(
+          new Error(
+            "APNs registration failed. Check signing and the push entitlement.",
+          ),
+        );
+      });
+      await PushNotifications.register();
+    })().catch((error) => {
+      clean();
+      reject(error);
+    });
   });
 }
