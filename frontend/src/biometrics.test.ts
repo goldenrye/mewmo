@@ -131,17 +131,19 @@ it("clears expired or revoked credentials and requires a password", async () => 
     new Response('{"detail":"Please sign in"}', { status: 401 }),
   );
   await expect(biometric.signInWithBiometrics()).rejects.toThrow(
-    "expired or been revoked",
+    "may be expired or revoked",
   );
   expect(auth.currentSession().token).toBeNull();
   expect(mocks.clear).toHaveBeenCalledWith({ server });
 });
 
 it("keeps protected credentials for retry after a network failure", async () => {
-  vi.mocked(fetch).mockRejectedValueOnce(new Error("Network unavailable"));
-  await expect(biometric.signInWithBiometrics()).rejects.toThrow(
-    "Network unavailable",
-  );
+  vi.mocked(fetch).mockRejectedValueOnce(new TypeError("Load failed"));
+  const failure = await biometric
+    .signInWithBiometrics()
+    .catch((error) => error);
+  expect(failure).toBeInstanceOf(biometric.BiometricConnectionError);
+  expect(failure.message).toContain("Could not reach the server");
   expect(auth.currentSession().token).toBeNull();
   expect(mocks.clear).not.toHaveBeenCalled();
 });
@@ -152,7 +154,7 @@ it("allows repeated manual retries after connection and server failures", async 
     .mockResolvedValueOnce(
       new Response('{"detail":"Try later"}', { status: 503 }),
     );
-  for (const message of ["Load failed", "Try later"]) {
+  for (const message of ["Could not reach the server", "temporarily unable"]) {
     const failure = await biometric
       .signInWithBiometrics()
       .catch((error) => error);
@@ -160,6 +162,7 @@ it("allows repeated manual retries after connection and server failures", async 
     expect(failure).not.toBeInstanceOf(
       biometric.BiometricPasswordRequiredError,
     );
+    expect(failure).toBeInstanceOf(biometric.BiometricConnectionError);
     expect(auth.currentSession().token).toBeNull();
     expect(mocks.clear).not.toHaveBeenCalled();
   }
@@ -176,9 +179,19 @@ for (const code of ["MISSING_SESSION", "INVALID_SESSION"]) {
     mocks.restore.mockRejectedValueOnce(
       Object.assign(new Error("Cannot restore"), { code }),
     );
-    await expect(biometric.signInWithBiometrics()).rejects.toBeInstanceOf(
-      biometric.BiometricPasswordRequiredError,
+    const failure = await biometric
+      .signInWithBiometrics()
+      .catch((error) => error);
+    expect(failure).toBeInstanceOf(biometric.BiometricPasswordRequiredError);
+    expect(failure.reason).toBe(
+      code === "MISSING_SESSION" ? "missing" : "invalid",
     );
+    expect(failure.message).toContain(
+      code === "MISSING_SESSION"
+        ? "No saved sign-in"
+        : "cannot be read or is invalid",
+    );
+    expect(failure).not.toBeInstanceOf(biometric.BiometricConnectionError);
     expect(fetch).not.toHaveBeenCalled();
     expect(auth.currentSession().token).toBeNull();
   });
@@ -215,9 +228,12 @@ it("rejects a server response for a different account", async () => {
   vi.mocked(fetch).mockResolvedValueOnce(
     new Response(JSON.stringify({ user: { ...user, id: "bob-id" } })),
   );
-  await expect(biometric.signInWithBiometrics()).rejects.toThrow(
-    "Sign in with your password",
-  );
+  const failure = await biometric
+    .signInWithBiometrics()
+    .catch((error) => error);
+  expect(failure.reason).toBe("invalid");
+  expect(failure.message).toContain("does not match the server account");
+  expect(failure.message).not.toContain("expired");
   expect(auth.currentSession().token).toBeNull();
   expect(mocks.clear).toHaveBeenCalled();
 });
@@ -316,6 +332,9 @@ it("aborts a stalled verification after ten seconds without deleting protected c
   await vi.advanceTimersByTimeAsync(1);
   await rejected;
   expect(signal.aborted).toBe(true);
+  await expect(pending).rejects.toBeInstanceOf(
+    biometric.BiometricConnectionError,
+  );
   expect(auth.currentSession().token).toBeNull();
   expect(mocks.clear).not.toHaveBeenCalled();
   expect(vi.getTimerCount()).toBe(0);
@@ -400,4 +419,28 @@ it("cancels the deadline on success so it cannot clear a later account", async (
   await vi.advanceTimersByTimeAsync(20_000);
   expect(auth.currentSession().token).toBe("bob-token");
   expect(vi.getTimerCount()).toBe(0);
+});
+
+for (const status of [429, 500, 502, 503]) {
+  it(`reports HTTP ${status} as unavailable verification, not rejected credentials`, async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response('{"detail":"Unavailable"}', { status }),
+    );
+    const failure = await biometric
+      .signInWithBiometrics()
+      .catch((error) => error);
+    expect(failure).toBeInstanceOf(biometric.BiometricConnectionError);
+    expect(failure).not.toBeInstanceOf(
+      biometric.BiometricPasswordRequiredError,
+    );
+    expect(mocks.clear).not.toHaveBeenCalled();
+  });
+}
+
+it("identifies incomplete local credentials as invalid without contacting the server", async () => {
+  mocks.restore.mockResolvedValueOnce({ token: "", userId: user.id });
+  await expect(biometric.signInWithBiometrics()).rejects.toMatchObject({
+    reason: "invalid",
+  });
+  expect(fetch).not.toHaveBeenCalled();
 });

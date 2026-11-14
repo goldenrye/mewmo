@@ -10,7 +10,16 @@ export type BiometricStatus = {
 };
 export type BiometricLoginStage = "unlocking" | "verifying";
 
-export class BiometricPasswordRequiredError extends Error {}
+export class BiometricPasswordRequiredError extends Error {
+  constructor(
+    message: string,
+    public readonly reason: "missing" | "invalid" | "rejected" = "rejected",
+  ) {
+    super(message);
+  }
+}
+
+export class BiometricConnectionError extends Error {}
 
 const verificationTimeout =
   "Session verification timed out. Check your connection, then try again or use your password.";
@@ -103,7 +112,10 @@ export async function signInWithBiometrics(
       throw new Error("Account changed. Sign-in cancelled.");
     if (code === "MISSING_SESSION" || code === "INVALID_SESSION")
       throw new BiometricPasswordRequiredError(
-        "The saved session is unavailable. Use your password.",
+        code === "MISSING_SESSION"
+          ? "No saved sign-in was found on this iPhone. Sign in with your password."
+          : "The saved sign-in on this iPhone cannot be read or is invalid. Sign in with your password.",
+        code === "MISSING_SESSION" ? "missing" : "invalid",
       );
     throw error;
   }
@@ -111,7 +123,8 @@ export async function signInWithBiometrics(
     throw new Error("Account changed. Sign-in cancelled.");
   if (!saved.token || !saved.userId)
     throw new BiometricPasswordRequiredError(
-      "The saved session is unavailable. Use your password.",
+      "The saved sign-in on this iPhone cannot be read or is invalid. Sign in with your password.",
+      "invalid",
     );
   setToken(saved.token, saved.userId);
   const restoredVersion = currentSession().version;
@@ -124,7 +137,7 @@ export async function signInWithBiometrics(
     // Race as well as abort: a stalled WebView request must not trap the login UI.
     const deadline = new Promise<never>((_, reject) => {
       timer = setTimeout(() => {
-        reject(new Error(verificationTimeout));
+        reject(new BiometricConnectionError(verificationTimeout));
         controller.abort();
       }, 10_000);
     });
@@ -143,16 +156,32 @@ export async function signInWithBiometrics(
     }
     return { ...account, token: saved.token };
   } catch (error) {
-    if (currentSession().version === restoredVersion) setToken(null);
+    const sameSession = currentSession().version === restoredVersion;
+    if (sameSession) setToken(null);
     if (
       mismatchedAccount ||
       (error instanceof ApiError && error.status === 401)
     ) {
       await clearBiometrics();
       throw new BiometricPasswordRequiredError(
-        "Your session has expired or been revoked. Sign in with your password.",
+        mismatchedAccount
+          ? "The saved sign-in does not match the server account. Sign in with your password."
+          : "The server rejected your saved session. It may be expired or revoked. Sign in with your password.",
+        mismatchedAccount ? "invalid" : "rejected",
       );
     }
+    if (sameSession && error instanceof TypeError)
+      throw new BiometricConnectionError(
+        "Could not reach the server to verify your saved sign-in. Check your connection and retry.",
+      );
+    if (
+      sameSession &&
+      error instanceof ApiError &&
+      (error.status >= 500 || error.status === 429)
+    )
+      throw new BiometricConnectionError(
+        "The server is temporarily unable to verify your saved sign-in. Please retry later.",
+      );
     // Connectivity failures leave the protected Keychain session available for retry.
     throw error;
   } finally {

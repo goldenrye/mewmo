@@ -5,14 +5,17 @@ async function mockPrompt(
   page: Page,
   cancelled: boolean,
   timeout = false,
-  recovery: "none" | "transient" | "expired" | "missing" = "none",
+  recovery: "none" | "transient" | "expired" | "missing" | "invalid" = "none",
 ) {
   await page.route("**/src/biometrics.ts*", (route) =>
     route.fulfill({
       contentType: "application/javascript",
       body: `
         import { api } from "/src/api.ts";
-        export class BiometricPasswordRequiredError extends Error {}
+        export class BiometricPasswordRequiredError extends Error {
+          constructor(message, reason = "rejected") { super(message); this.reason = reason; }
+        }
+        export class BiometricConnectionError extends Error {}
         let failedVerification = false;
         let attempts = 0;
         let statusCalls = 0;
@@ -29,21 +32,23 @@ async function mockPrompt(
         export async function signInWithBiometrics(onProgress) {
           document.documentElement.dataset.biometricAttempts = String(++attempts);
           if (${cancelled}) throw new Error("Sign-in cancelled. Try again or use your password.");
-          if (${recovery === "expired" || recovery === "missing"}) {
+          if (${["expired", "missing", "invalid"].includes(recovery)}) {
             throw new BiometricPasswordRequiredError(${JSON.stringify(
               recovery === "expired"
-                ? "Your session has expired or been revoked. Sign in with your password."
-                : "The saved session is unavailable. Use your password.",
-            )});
+                ? "The server rejected your saved session. It may be expired or revoked. Sign in with your password."
+                : recovery === "missing"
+                  ? "No saved sign-in was found on this iPhone. Sign in with your password."
+                  : "The saved sign-in on this iPhone cannot be read or is invalid. Sign in with your password.",
+            )}, ${JSON.stringify(recovery === "expired" ? "rejected" : recovery)});
           }
           if (${timeout} && attempts === 1) {
             onProgress?.("verifying");
             await new Promise(resolve => setTimeout(resolve, 1000));
             failedVerification = true;
-            throw new Error("Session verification timed out. Check your connection, then try again or use your password.");
+            throw new BiometricConnectionError("Session verification timed out. Check your connection, then try again or use your password.");
           }
           if (${recovery === "transient"} && attempts === 2)
-            throw new Error("Server temporarily unavailable");
+            throw new BiometricConnectionError("Server temporarily unavailable");
           return api("/auth/login", {
             method: "POST",
             body: JSON.stringify({ username: "admin", password: "mewmo-local-test" }),
@@ -75,6 +80,9 @@ test("cancelling the mocked Face ID prompt leaves password fallback usable", asy
     .getByRole("button", { name: "Sign in with Face ID", exact: true })
     .click();
   await expect(page.getByRole("alert")).toContainText("Sign-in cancelled");
+  await expect(page.getByRole("alert").locator("strong")).toHaveText(
+    "Biometric sign-in interrupted",
+  );
   await expect(
     page.getByRole("heading", { name: "Overview", exact: true }),
   ).toHaveCount(0);
@@ -131,6 +139,9 @@ for (const language of ["en", "zh-CN"]) {
     await page.clock.fastForward(1000);
     await expect(page.getByRole("alert")).toContainText(
       zh ? "登录验证超时" : "Session verification timed out",
+    );
+    await expect(page.getByRole("alert").locator("strong")).toHaveText(
+      zh ? "暂时无法完成服务器验证" : "Server verification unavailable",
     );
     await expect(
       page.getByRole("button", {
@@ -203,6 +214,9 @@ for (const language of ["en", "zh-CN"]) {
     await expect(page.getByRole("alert")).toContainText(
       "Server temporarily unavailable",
     );
+    await expect(page.getByRole("alert").locator("strong")).toHaveText(
+      zh ? "暂时无法完成服务器验证" : "Server verification unavailable",
+    );
     await expect(retry).toBeEnabled();
     await expect(page.locator("html")).toHaveAttribute(
       "data-biometric-attempts",
@@ -227,7 +241,7 @@ for (const language of ["en", "zh-CN"]) {
     );
   });
 
-  for (const reason of ["expired", "missing"] as const) {
+  for (const reason of ["expired", "missing", "invalid"] as const) {
     test(`${language} requires passwords only when saved credentials are ${reason}`, async ({
       page,
     }) => {
@@ -236,6 +250,7 @@ for (const language of ["en", "zh-CN"]) {
         (value) => localStorage.setItem("mewmo:language", value),
         language,
       );
+      await page.setViewportSize({ width: 320, height: 740 });
       await mockPrompt(page, false, false, reason);
       await page
         .getByRole("button", {
@@ -243,7 +258,34 @@ for (const language of ["en", "zh-CN"]) {
           exact: true,
         })
         .click();
-      await expect(page.getByRole("alert")).toBeVisible();
+      const alert = page.getByRole("alert");
+      const titles = {
+        expired: zh ? "已保存的会话被服务器拒绝" : "Saved session rejected",
+        missing: zh ? "未找到已保存的登录凭据" : "Saved sign-in missing",
+        invalid: zh ? "已保存的登录凭据无效" : "Saved sign-in invalid",
+      };
+      await expect(alert).toBeVisible();
+      await expect(alert.locator("strong")).toHaveText(titles[reason]);
+      await expect(alert).toContainText(
+        zh
+          ? "使用密码登录后，请在设置中重新启用面容 ID。"
+          : "After password sign-in, enable Face ID again in Settings.",
+      );
+      if (reason === "expired")
+        await expect(alert).toContainText(
+          zh ? "可能已过期或被撤销" : "may be expired or revoked",
+        );
+      await expect(alert).not.toContainText(
+        zh ? "暂时无法完成服务器验证" : "Server verification unavailable",
+      );
+      const alertBox = (await alert.boundingBox())!;
+      const usernameBox = (await page
+        .getByLabel(zh ? "用户名" : "Username", { exact: true })
+        .boundingBox())!;
+      expect(alertBox.y + alertBox.height).toBeLessThan(usernameBox.y);
+      expect(
+        await page.evaluate(() => document.documentElement.scrollWidth),
+      ).toBeLessThanOrEqual(320);
       await expect(page.locator(".login-form .secondary")).toHaveCount(0);
       await expect(
         page.getByRole("button", {

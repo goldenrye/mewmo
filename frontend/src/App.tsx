@@ -48,6 +48,7 @@ import {
   clearBiometrics,
   signInWithBiometrics,
   BiometricPasswordRequiredError,
+  BiometricConnectionError,
   type BiometricLoginStage,
   type BiometricStatus,
 } from "./biometrics";
@@ -114,6 +115,11 @@ function Login({
   const [error, setError] = useState("");
   const [biometric, setBiometric] = useState<BiometricStatus | null>(null);
   const [biometricRetry, setBiometricRetry] = useState(false);
+  const [biometricNotice, setBiometricNotice] = useState<{
+    title: string;
+    message: string;
+    passwordRequired: boolean;
+  } | null>(null);
   const [biometricStage, setBiometricStage] =
     useState<BiometricLoginStage | null>(null);
   useEffect(() => {
@@ -131,11 +137,24 @@ function Login({
     if (busy) return;
     setBusy(true);
     setError("");
+    setBiometricNotice(null);
     try {
       onLogin(await signInWithBiometrics(setBiometricStage));
     } catch (error) {
-      setError((error as Error).message);
       const passwordRequired = error instanceof BiometricPasswordRequiredError;
+      setBiometricNotice({
+        title: passwordRequired
+          ? error.reason === "missing"
+            ? "Saved sign-in missing"
+            : error.reason === "invalid"
+              ? "Saved sign-in invalid"
+              : "Saved session rejected"
+          : error instanceof BiometricConnectionError
+            ? "Server verification unavailable"
+            : "Biometric sign-in interrupted",
+        message: (error as Error).message,
+        passwordRequired,
+      });
       setBiometricRetry(!passwordRequired);
       // Transient failures must not remove the user's manual retry option.
       if (passwordRequired)
@@ -151,6 +170,7 @@ function Login({
     const version = currentSession().version;
     setBusy(true);
     setError("");
+    setBiometricNotice(null);
     try {
       if (register && password !== confirmation)
         throw new Error(t("Passwords do not match."));
@@ -213,13 +233,6 @@ function Login({
               })}
             </button>
           )}
-          {!register && biometric?.enabled && biometricRetry && !busy && (
-            <p className="muted small">
-              {t(
-                "Your saved sign-in is kept. Retry when ready, or choose password sign-in below.",
-              )}
-            </p>
-          )}
           {biometricStage && (
             <p role="status" className="muted small">
               {t(
@@ -228,6 +241,24 @@ function Login({
                   : "Unlocking your saved sign-in...",
               )}
             </p>
+          )}
+          {!register && biometricNotice && (
+            <div className="error biometric-notice" role="alert">
+              <strong>{t(biometricNotice.title)}</strong>
+              <p>{messageText(biometricNotice.message)}</p>
+              <p>
+                {biometricNotice.passwordRequired
+                  ? t(
+                      "After password sign-in, enable {method} again in Settings.",
+                      {
+                        method: t(biometric?.label || "Face ID"),
+                      },
+                    )
+                  : t(
+                      "Your saved sign-in is kept. Retry when ready, or choose password sign-in below.",
+                    )}
+              </p>
+            </div>
           )}
           {register && (
             <>
@@ -317,6 +348,7 @@ function Login({
             onClick={() => {
               setRegister(!register);
               setError("");
+              setBiometricNotice(null);
               setPassword("");
               setConfirmation("");
             }}

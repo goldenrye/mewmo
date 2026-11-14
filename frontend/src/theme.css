@@ -632,6 +632,13 @@ dialog::backdrop {
   margin: 0;
   align-items: center;
 }
+.biometric-notice {
+  overflow-wrap: anywhere;
+}
+.biometric-notice p {
+  font-size: var(--text-small);
+  margin: 8px 0 0;
+}
 @media (max-width: 420px) {
   .home-heading h1 {
     font-size: 1.125rem;
