@@ -10,6 +10,8 @@ export type BiometricStatus = {
 };
 export type BiometricLoginStage = "unlocking" | "verifying";
 
+export class BiometricPasswordRequiredError extends Error {}
+
 const verificationTimeout =
   "Session verification timed out. Check your connection, then try again or use your password.";
 
@@ -89,14 +91,28 @@ export async function signInWithBiometrics(
   const version = currentSession().version;
   onProgress?.("unlocking");
   await mutations.catch(() => {});
-  const saved = await bridge.restore({
-    server: apiBase,
-    language: getLocale(),
-  });
+  let saved: { token: string; userId: string };
+  try {
+    saved = await bridge.restore({
+      server: apiBase,
+      language: getLocale(),
+    });
+  } catch (error) {
+    const code = (error as { code?: string } | null)?.code;
+    if (currentSession().version !== version)
+      throw new Error("Account changed. Sign-in cancelled.");
+    if (code === "MISSING_SESSION" || code === "INVALID_SESSION")
+      throw new BiometricPasswordRequiredError(
+        "The saved session is unavailable. Use your password.",
+      );
+    throw error;
+  }
   if (currentSession().version !== version)
     throw new Error("Account changed. Sign-in cancelled.");
   if (!saved.token || !saved.userId)
-    throw new Error("The saved session is unavailable. Use your password.");
+    throw new BiometricPasswordRequiredError(
+      "The saved session is unavailable. Use your password.",
+    );
   setToken(saved.token, saved.userId);
   const restoredVersion = currentSession().version;
   let mismatchedAccount = false;
@@ -133,7 +149,7 @@ export async function signInWithBiometrics(
       (error instanceof ApiError && error.status === 401)
     ) {
       await clearBiometrics();
-      throw new Error(
+      throw new BiometricPasswordRequiredError(
         "Your session has expired or been revoked. Sign in with your password.",
       );
     }

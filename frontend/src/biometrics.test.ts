@@ -146,6 +146,71 @@ it("keeps protected credentials for retry after a network failure", async () => 
   expect(mocks.clear).not.toHaveBeenCalled();
 });
 
+it("allows repeated manual retries after connection and server failures", async () => {
+  vi.mocked(fetch)
+    .mockRejectedValueOnce(new TypeError("Load failed"))
+    .mockResolvedValueOnce(
+      new Response('{"detail":"Try later"}', { status: 503 }),
+    );
+  for (const message of ["Load failed", "Try later"]) {
+    const failure = await biometric
+      .signInWithBiometrics()
+      .catch((error) => error);
+    expect(failure.message).toContain(message);
+    expect(failure).not.toBeInstanceOf(
+      biometric.BiometricPasswordRequiredError,
+    );
+    expect(auth.currentSession().token).toBeNull();
+    expect(mocks.clear).not.toHaveBeenCalled();
+  }
+  // There are no automatic retries. Only another explicit call restores again.
+  expect(mocks.restore).toHaveBeenCalledTimes(2);
+  const result = await biometric.signInWithBiometrics();
+  expect(result.user.id).toBe(user.id);
+  expect(mocks.restore).toHaveBeenCalledTimes(3);
+  expect(mocks.clear).not.toHaveBeenCalled();
+});
+
+for (const code of ["MISSING_SESSION", "INVALID_SESSION"]) {
+  it(`marks ${code} as requiring password authentication`, async () => {
+    mocks.restore.mockRejectedValueOnce(
+      Object.assign(new Error("Cannot restore"), { code }),
+    );
+    await expect(biometric.signInWithBiometrics()).rejects.toBeInstanceOf(
+      biometric.BiometricPasswordRequiredError,
+    );
+    expect(fetch).not.toHaveBeenCalled();
+    expect(auth.currentSession().token).toBeNull();
+  });
+}
+
+for (const code of ["CANCELLED", "AUTH_FAILED"]) {
+  it(`keeps ${code} retryable rather than forcing password authentication`, async () => {
+    mocks.restore.mockRejectedValueOnce(
+      Object.assign(new Error("Try again"), { code }),
+    );
+    const failure = await biometric
+      .signInWithBiometrics()
+      .catch((error) => error);
+    expect(failure).not.toBeInstanceOf(
+      biometric.BiometricPasswordRequiredError,
+    );
+    expect(mocks.clear).not.toHaveBeenCalled();
+    const result = await biometric.signInWithBiometrics();
+    expect(result.user.id).toBe(user.id);
+  });
+}
+
+it("marks a rejected server session as password-required", async () => {
+  vi.mocked(fetch).mockResolvedValueOnce(
+    new Response('{"detail":"Please sign in"}', { status: 401 }),
+  );
+  await expect(biometric.signInWithBiometrics()).rejects.toBeInstanceOf(
+    biometric.BiometricPasswordRequiredError,
+  );
+  expect(mocks.clear).toHaveBeenCalledTimes(1);
+});
+
 it("rejects a server response for a different account", async () => {
   vi.mocked(fetch).mockResolvedValueOnce(
     new Response(JSON.stringify({ user: { ...user, id: "bob-id" } })),

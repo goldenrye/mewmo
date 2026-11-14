@@ -47,6 +47,7 @@ import {
   biometricStatus,
   clearBiometrics,
   signInWithBiometrics,
+  BiometricPasswordRequiredError,
   type BiometricLoginStage,
   type BiometricStatus,
 } from "./biometrics";
@@ -112,6 +113,7 @@ function Login({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [biometric, setBiometric] = useState<BiometricStatus | null>(null);
+  const [biometricRetry, setBiometricRetry] = useState(false);
   const [biometricStage, setBiometricStage] =
     useState<BiometricLoginStage | null>(null);
   useEffect(() => {
@@ -133,13 +135,11 @@ function Login({
       onLogin(await signInWithBiometrics(setBiometricStage));
     } catch (error) {
       setError((error as Error).message);
-      // Do not keep retry/password controls blocked while refreshing native availability.
-      const version = currentSession().version;
-      void biometricStatus()
-        .then((value) => {
-          if (currentSession().version === version) setBiometric(value);
-        })
-        .catch(() => {});
+      const passwordRequired = error instanceof BiometricPasswordRequiredError;
+      setBiometricRetry(!passwordRequired);
+      // Transient failures must not remove the user's manual retry option.
+      if (passwordRequired)
+        setBiometric((value) => value && { ...value, enabled: false });
     } finally {
       setBiometricStage(null);
       setBusy(false);
@@ -208,8 +208,17 @@ function Login({
               onClick={() => void biometricLogin()}
             >
               <ScanFace size={20} />
-              {t("Sign in with {method}", { method: t(biometric.label) })}
+              {t(biometricRetry ? "Retry {method}" : "Sign in with {method}", {
+                method: t(biometric.label),
+              })}
             </button>
+          )}
+          {!register && biometric?.enabled && biometricRetry && !busy && (
+            <p className="muted small">
+              {t(
+                "Your saved sign-in is kept. Retry when ready, or choose password sign-in below.",
+              )}
+            </p>
           )}
           {biometricStage && (
             <p role="status" className="muted small">

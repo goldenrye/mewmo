@@ -97,6 +97,8 @@
   "Welcome to Mewmo": "欢迎使用 Mewmo",
   "An invitation is required to join.": "需要邀请才能注册。",
   "Sign in with {method}": "使用{method}登录",
+  "Retry {method}": "重试{method}",
+  "Your saved sign-in is kept. Retry when ready, or choose password sign-in below.": "已保留你的登录凭据。可随时重试，或自行选择下方的密码登录。",
   "Face ID": "面容 ID",
   "Unlocking your saved sign-in...": "正在解锁已保存的登录凭据...",
   "Checking your session with the server...": "正在向服务器验证登录状态...",

@@ -1,28 +1,49 @@
 import { expect, test, type Page } from "@playwright/test";
 
 // UI-only stand-in for the system prompt. Keychain and a real scan require an iPhone.
-async function mockPrompt(page: Page, cancelled: boolean, timeout = false) {
+async function mockPrompt(
+  page: Page,
+  cancelled: boolean,
+  timeout = false,
+  recovery: "none" | "transient" | "expired" | "missing" = "none",
+) {
   await page.route("**/src/biometrics.ts*", (route) =>
     route.fulfill({
       contentType: "application/javascript",
       body: `
         import { api } from "/src/api.ts";
+        export class BiometricPasswordRequiredError extends Error {}
         let failedVerification = false;
+        let attempts = 0;
+        let statusCalls = 0;
         export const supportsBiometrics = () => true;
         export const biometricStatus = async () => {
+          document.documentElement.dataset.biometricStatusCalls = String(++statusCalls);
+          if (failedVerification && ${recovery === "transient"})
+            return { available: false, enabled: false, label: "Face ID" };
           if (failedVerification) return new Promise(() => {});
           return { available: true, enabled: true, label: "Face ID" };
         };
         export const clearBiometrics = async () => {};
         export const enableBiometrics = async () => {};
         export async function signInWithBiometrics(onProgress) {
+          document.documentElement.dataset.biometricAttempts = String(++attempts);
           if (${cancelled}) throw new Error("Sign-in cancelled. Try again or use your password.");
-          if (${timeout}) {
+          if (${recovery === "expired" || recovery === "missing"}) {
+            throw new BiometricPasswordRequiredError(${JSON.stringify(
+              recovery === "expired"
+                ? "Your session has expired or been revoked. Sign in with your password."
+                : "The saved session is unavailable. Use your password.",
+            )});
+          }
+          if (${timeout} && attempts === 1) {
             onProgress?.("verifying");
             await new Promise(resolve => setTimeout(resolve, 1000));
             failedVerification = true;
             throw new Error("Session verification timed out. Check your connection, then try again or use your password.");
           }
+          if (${recovery === "transient"} && attempts === 2)
+            throw new Error("Server temporarily unavailable");
           return api("/auth/login", {
             method: "POST",
             body: JSON.stringify({ username: "admin", password: "mewmo-local-test" }),
@@ -111,7 +132,12 @@ for (const language of ["en", "zh-CN"]) {
     await expect(page.getByRole("alert")).toContainText(
       zh ? "登录验证超时" : "Session verification timed out",
     );
-    await expect(face).toBeEnabled();
+    await expect(
+      page.getByRole("button", {
+        name: zh ? "重试面容 ID" : "Retry Face ID",
+        exact: true,
+      }),
+    ).toBeEnabled();
     await expect(page.getByRole("status")).toHaveCount(0);
     await page
       .getByLabel(zh ? "用户名" : "Username", { exact: true })
@@ -129,6 +155,110 @@ for (const language of ["en", "zh-CN"]) {
       }),
     ).toBeVisible();
   });
+
+  test(`${language} manual Face ID retry survives repeated failures without forcing passwords`, async ({
+    page,
+  }) => {
+    const zh = language === "zh-CN";
+    await page.addInitScript(
+      (value) => localStorage.setItem("mewmo:language", value),
+      language,
+    );
+    await page.clock.install();
+    await mockPrompt(page, false, true, "transient");
+    const initialFace = page.getByRole("button", {
+      name: zh ? "使用面容 ID登录" : "Sign in with Face ID",
+      exact: true,
+    });
+    await expect(initialFace).toBeEnabled();
+    const initialStatusCalls = await page
+      .locator("html")
+      .getAttribute("data-biometric-status-calls");
+    expect(initialStatusCalls).not.toBeNull();
+    await initialFace.click();
+    await page.clock.fastForward(1000);
+    const retry = page.getByRole("button", {
+      name: zh ? "重试面容 ID" : "Retry Face ID",
+      exact: true,
+    });
+    await expect(retry).toBeEnabled();
+    await expect(
+      page.getByText(
+        zh
+          ? "已保留你的登录凭据。可随时重试，或自行选择下方的密码登录。"
+          : "Your saved sign-in is kept. Retry when ready, or choose password sign-in below.",
+      ),
+    ).toBeVisible();
+    await page.clock.fastForward(30_000);
+    await expect(page.locator("html")).toHaveAttribute(
+      "data-biometric-attempts",
+      "1",
+    );
+    // A transient status check must not hide the existing retry control.
+    await expect(page.locator("html")).toHaveAttribute(
+      "data-biometric-status-calls",
+      initialStatusCalls!,
+    );
+    await retry.click();
+    await expect(page.getByRole("alert")).toContainText(
+      "Server temporarily unavailable",
+    );
+    await expect(retry).toBeEnabled();
+    await expect(page.locator("html")).toHaveAttribute(
+      "data-biometric-attempts",
+      "2",
+    );
+    await expect(
+      page.getByLabel(zh ? "用户名" : "Username", { exact: true }),
+    ).toHaveValue("");
+    await expect(
+      page.getByLabel(zh ? "密码" : "Your password", { exact: true }),
+    ).toHaveValue("");
+    await retry.click();
+    await expect(
+      page.getByRole("heading", {
+        name: zh ? "首页" : "Overview",
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect(page.locator("html")).toHaveAttribute(
+      "data-biometric-attempts",
+      "3",
+    );
+  });
+
+  for (const reason of ["expired", "missing"] as const) {
+    test(`${language} requires passwords only when saved credentials are ${reason}`, async ({
+      page,
+    }) => {
+      const zh = language === "zh-CN";
+      await page.addInitScript(
+        (value) => localStorage.setItem("mewmo:language", value),
+        language,
+      );
+      await mockPrompt(page, false, false, reason);
+      await page
+        .getByRole("button", {
+          name: zh ? "使用面容 ID登录" : "Sign in with Face ID",
+          exact: true,
+        })
+        .click();
+      await expect(page.getByRole("alert")).toBeVisible();
+      await expect(page.locator(".login-form .secondary")).toHaveCount(0);
+      await expect(
+        page.getByRole("button", {
+          name: zh ? "登录" : "Sign in",
+          exact: true,
+        }),
+      ).toBeEnabled();
+      await expect(
+        page.getByRole("heading", {
+          name: zh ? "首页" : "Overview",
+          exact: true,
+        }),
+      ).toHaveCount(0);
+    });
+  }
 
   test(`${language} login keeps language, Face ID, and fields in one column`, async ({
     page,
