@@ -74,7 +74,9 @@ async function nativeUI(page: Page, mode = "success") {
         }
         return emit();
       };
-      export const alarmMessage = item => state.states[item.id]==="failed"
+      export const alarmMessage = (item, snapshot, early=false) => early && new Date(item.due_at).getTime()-3600000<=Date.now()
+        ? "No one-hour alarm scheduled: that time has already passed."
+        : state.states[item.id]==="failed"
         ? "Could not schedule the alarm. Ordinary notifications are unchanged."
         : item.status!=="open" ? "No urgent alarm needed for this item." : "Alarm scheduled on this iPhone.";
     `,
@@ -111,7 +113,9 @@ for (const language of ["en", "zh-CN"]) {
     const item = await (await response).json();
     expect(item.urgent).toBe(true);
     dialog = page.getByRole("dialog");
-    await expect(dialog.getByRole("status")).toContainText(
+    await expect(
+      dialog.locator('[data-alarm="due"]').getByRole("status"),
+    ).toContainText(
       language === "en" ? "ordinary notifications only" : "仅使用普通通知",
     );
     await expect(
@@ -167,7 +171,12 @@ for (const language of ["en", "zh-CN"]) {
       })
       .click();
     const item = await (await response).json();
-    await expect(page.getByRole("dialog").getByRole("status")).toHaveText(
+    await expect(
+      page
+        .getByRole("dialog")
+        .locator('[data-alarm="due"]')
+        .getByRole("status"),
+    ).toHaveText(
       language === "en"
         ? "Alarm scheduled on this iPhone."
         : "已在此 iPhone 上设置闹钟。",
@@ -175,8 +184,15 @@ for (const language of ["en", "zh-CN"]) {
     const rows = await page.request
       .get(`/api/items/${item.id}/reminders`)
       .then((r) => r.json());
-    expect(rows).toHaveLength(1);
-    expect(rows[0].status).toBe("pending");
+    expect(rows).toHaveLength(4);
+    expect(
+      rows.every((row: { status: string }) => row.status === "pending"),
+    ).toBe(true);
+    await expect(
+      page.locator('[data-alarm="early"]').getByRole("status"),
+    ).toContainText(
+      language === "en" ? "that time has already passed" : "该时间已过",
+    );
     await page
       .getByRole("button", {
         name: language === "en" ? "Mark complete" : "标记为已完成",
@@ -243,9 +259,9 @@ test("failed scheduling does not duplicate saved items; retry loads the latest t
   );
   await dialog.getByRole("button", { name: "Confirm & save" }).click();
   const item = await (await response).json();
-  await expect(page.getByRole("dialog").getByRole("status")).toContainText(
-    "Could not schedule",
-  );
+  await expect(
+    page.getByRole("dialog").locator('[data-alarm="due"]').getByRole("status"),
+  ).toContainText("Could not schedule");
   expect(
     await page.request.get("/api/items").then((r) => r.json()),
   ).toHaveLength(before.length + 1);
@@ -263,9 +279,9 @@ test("failed scheduling does not duplicate saved items; retry loads the latest t
   await page
     .getByRole("button", { name: "Schedule alarm", exact: true })
     .click();
-  await expect(page.getByRole("dialog").getByRole("status")).toHaveText(
-    "Alarm scheduled on this iPhone.",
-  );
+  await expect(
+    page.getByRole("dialog").locator('[data-alarm="due"]').getByRole("status"),
+  ).toHaveText("Alarm scheduled on this iPhone.");
   await expect(page.getByRole("dialog").locator(".date-preview")).toContainText(
     "14:00",
   );
@@ -280,3 +296,55 @@ test("failed scheduling does not duplicate saved items; retry loads the latest t
   ).toHaveLength(before.length + 1);
   await page.request.delete(`/api/items/${item.id}`);
 });
+
+for (const language of ["en", "zh-CN"]) {
+  test(`urgent policy is automatic and both future alarm statuses are visible (${language})`, async ({
+    page,
+  }) => {
+    const zh = language !== "en";
+    await nativeUI(page);
+    await login(page, language);
+    await page
+      .getByLabel(zh ? "用自然语言添加事项" : "Natural language input")
+      .fill("Doctor in 4 hours");
+    await page
+      .getByRole("button", { name: zh ? "预览草稿" : "Preview draft" })
+      .click();
+    const dialog = page.getByRole("dialog");
+    await dialog
+      .getByRole("checkbox", {
+        name: zh ? "紧急闹钟" : "Urgent alarm",
+        exact: true,
+      })
+      .check();
+    await dialog.locator(".rules summary").click();
+    await expect(dialog.locator(".rules summary")).toContainText(
+      zh ? "自动" : "Automatic",
+    );
+    await expect(dialog.locator(".urgent-policy")).toContainText(
+      zh ? "超过 10 天" : "More than 10 days",
+    );
+    await expect(dialog.locator(".rule-row")).toHaveCount(0);
+    await page.setViewportSize({ width: 320, height: 844 });
+    expect(
+      await dialog.evaluate((node) => node.scrollWidth <= node.clientWidth),
+    ).toBe(true);
+    const response = page.waitForResponse(
+      (r) => r.url().endsWith("/api/items") && r.request().method() === "POST",
+    );
+    await dialog
+      .getByRole("button", { name: zh ? "确认并保存" : "Confirm & save" })
+      .click();
+    const item = await (await response).json();
+    expect(item.early_alarm_id).toBeTruthy();
+    expect(item.early_alarm_id).not.toBe(item.id);
+    for (const phase of ["due", "early"]) {
+      await expect(
+        page.locator(`[data-alarm="${phase}"]`).getByRole("status"),
+      ).toHaveText(
+        zh ? "已在此 iPhone 上设置闹钟。" : "Alarm scheduled on this iPhone.",
+      );
+    }
+    await page.request.delete(`/api/items/${item.id}`);
+  });
+}

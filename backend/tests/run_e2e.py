@@ -1,12 +1,17 @@
 """Disposable localhost server for browser tests. Never points at production data."""
 
 import os
+import sys
 import tempfile
+from pathlib import Path
 
 import uvicorn
 from cryptography.fernet import Fernet
 
-from app.auth import password_hash
+# Running this file directly must test the checkout, not an installed app package.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from app.auth import password_hash  # noqa: E402
 
 with tempfile.TemporaryDirectory(prefix="mewmo-browser-") as directory:
     os.environ["DATABASE_URL"] = f"sqlite:///{directory}/test.db"

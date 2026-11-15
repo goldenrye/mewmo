@@ -260,3 +260,90 @@ it.each([
     expect(alarms.alarmMessage(item)).toContain(expected);
   },
 );
+
+const earlyId = "00000000-0000-5000-8000-000000000003";
+const dual = { ...item, early_alarm_id: earlyId };
+
+it("schedules due and one-hour alarms with independent stable IDs and sanitized titles", async () => {
+  await alarms.bindAlarmAccount("alice");
+  await alarms.syncAlarms([dual], { force: true });
+  const records = mocks.sync.mock.lastCall![0].items;
+  expect(records.map((r: { id: string }) => r.id)).toEqual([item.id, earlyId]);
+  expect(records[0].fireAt - records[1].fireAt).toBe(3600);
+  expect(records[1].title).toBe("In 1 hour: Turn off gas");
+  expect(records.every((r: { active: boolean }) => r.active)).toBe(true);
+  expect(JSON.stringify(records)).not.toContain("$120");
+  await alarms.syncAlarms([{ ...dual, due_at: "2099-11-10T05:38:00Z" }]);
+  expect(
+    mocks.sync.mock.lastCall![0].items.map((r: { id: string }) => r.id),
+  ).toEqual([item.id, earlyId]);
+});
+
+it("cancels both alarm IDs for partial completion, deletion, and urgency-off updates", async () => {
+  await alarms.bindAlarmAccount("alice");
+  for (const changed of [
+    { ...dual, status: "completed" as const },
+    { ...dual, status: "paid" as const },
+    { ...dual, urgent: false },
+  ]) {
+    await alarms.syncAlarms([changed]);
+    expect(mocks.sync.mock.lastCall![0].items).toHaveLength(2);
+    expect(
+      mocks.sync.mock.lastCall![0].items.every(
+        (r: { active: boolean }) => !r.active,
+      ),
+    ).toBe(true);
+  }
+});
+
+it("keeps due status independent when the early alarm hits its limit or is dismissed", async () => {
+  await alarms.bindAlarmAccount("alice");
+  for (const status of ["limit", "ended"]) {
+    const state = {
+      ...enabled,
+      authorization: "authorized" as const,
+      states: { [item.id]: "scheduled", [earlyId]: status },
+    };
+    expect(alarms.alarmMessage(dual, state)).toContain("Alarm scheduled");
+    expect(alarms.alarmMessage(dual, state, true)).toContain(
+      status === "limit" ? "alarm limit" : "ended",
+    );
+  }
+});
+
+it("leaves past-time handling to native without cancelling an unchanged ringing early alarm", async () => {
+  await alarms.bindAlarmAccount("alice");
+  const soon = {
+    ...dual,
+    due_at: new Date(Date.now() + 5 * 60000).toISOString(),
+  };
+  await alarms.syncAlarms([soon]);
+  const records = mocks.sync.mock.lastCall![0].items;
+  expect(records[1].fireAt * 1000).toBeLessThan(Date.now());
+  expect(records[1].active).toBe(true);
+  const state = { ...enabled, authorization: "authorized" as const };
+  expect(alarms.alarmMessage(soon, state, true)).toContain(
+    "that time has already passed",
+  );
+  expect(
+    alarms.alarmMessage(
+      soon,
+      { ...state, states: { [earlyId]: "alerting" } },
+      true,
+    ),
+  ).toContain("ringing");
+});
+
+it("explains older server limitations and never uses private raw titles for early alarms", async () => {
+  await alarms.bindAlarmAccount("alice");
+  const state = { ...enabled, authorization: "authorized" as const };
+  expect(alarms.alarmMessage(item, state, true)).toContain("Update the server");
+  await alarms.syncAlarms([{ ...dual, alarm_title: undefined }]);
+  expect(mocks.sync.mock.lastCall![0].items[1].title).toBe(
+    "In 1 hour: Mewmo reminder",
+  );
+  await alarms.syncAlarms([{ ...dual, alarm_title: "中".repeat(180) }]);
+  expect(Array.from(mocks.sync.mock.lastCall![0].items[1].title)).toHaveLength(
+    180,
+  );
+});

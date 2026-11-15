@@ -1,6 +1,7 @@
 import hashlib
 import re
 from datetime import UTC, date, datetime
+from uuid import NAMESPACE_URL, uuid5
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, Response
@@ -25,7 +26,7 @@ from .models import Delivery, Device, Item, ModelPreference, Reminder, User, now
 from .notes import router as notes_router
 from .parsing import ParseFailure, extract_file, parse_text
 from .push import valid_web_endpoint
-from .reminders import notification_title, reconcile
+from .reminders import notification_title, reconcile, urgent_rules
 from .schemas import Draft, ItemInput, ParseRequest, StateInput, default_rules
 
 app = FastAPI(title="Mewmo")
@@ -117,6 +118,7 @@ def item_json(item: Item) -> dict:
         "due_date": local.date(),
         "due_time": local.strftime("%H:%M"),
         "alarm_title": notification_title(item),
+        "early_alarm_id": str(uuid5(NAMESPACE_URL, f"mewmo:item:{item.id}:before:60")),
     }
 
 
@@ -252,16 +254,22 @@ def items(history: bool = False, db: Session = Depends(session), user: User = De
 
 
 def apply_input(item: Item, body: ItemInput):
+    was_urgent, previous_rules = item.urgent, item.rules
+    at = now()
     for field in ("kind", "title", "payee", "amount", "currency", "account_last4", "timezone", "status"):
         setattr(item, field, getattr(body, field))
     # Older clients must not silently disable an explicitly enabled urgent alarm.
     if item.id is None or "urgent" in body.model_fields_set:
         item.urgent = body.urgent
     item.due_at = body.due_at()
-    item.rules = [
-        r.model_dump() for r in (body.rules if body.rules is not None else default_rules(body.kind))
-    ]
-    item.finished_at = now() if item.status != "open" else None
+    rules = body.rules if body.rules is not None else default_rules(body.kind)
+    if item.urgent:
+        # Freeze the tier at confirmation. Reads and completion/undo must not shrink it.
+        rules = urgent_rules(item.due_at, at)
+    elif was_urgent and (body.rules is None or [r.model_dump() for r in rules] == previous_rules):
+        rules = default_rules(body.kind)
+    item.rules = [r.model_dump() for r in rules]
+    item.finished_at = at if item.status != "open" else None
 
 
 @router.post("/items", status_code=201)

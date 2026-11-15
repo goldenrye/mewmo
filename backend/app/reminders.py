@@ -13,6 +13,18 @@ from .schemas import ReminderRule
 log = logging.getLogger(__name__)
 
 
+def urgent_rules(due_at: datetime, at: datetime) -> list[ReminderRule]:
+    remaining = due_at - at
+    offsets = (
+        [10080, 1440, 60, 0]
+        if remaining > timedelta(days=10)
+        else [1440, 60, 0]
+        if remaining >= timedelta(days=3)
+        else [60, 0]
+    )
+    return [ReminderRule(minutes=minutes) for minutes in offsets]
+
+
 def fire_time(item: Item, rule: ReminderRule) -> datetime:
     if rule.mode == "before":
         return item.due_at - timedelta(minutes=rule.minutes)

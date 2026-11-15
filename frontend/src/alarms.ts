@@ -1,5 +1,5 @@
 import { Capacitor, registerPlugin } from "@capacitor/core";
-import { getLocale } from "./i18n";
+import { getLocale, t } from "./i18n";
 import type { Item } from "./types";
 
 export type AlarmSnapshot = {
@@ -147,6 +147,25 @@ export function syncAlarms(
     title: item.alarm_title || "Mewmo reminder",
     fireAt: new Date(item.due_at).getTime() / 1000,
   }));
+  // Keep due-time IDs unchanged and schedule them first if the device is near its limit.
+  // Include inactive/past early entries so partial edits can cancel both alarms, while
+  // native code preserves an unchanged alarm that is already ringing.
+  records.push(
+    ...items
+      .filter((item) => item.early_alarm_id)
+      .map((item) => ({
+        id: item.early_alarm_id!,
+        active: item.urgent === true && item.status === "open",
+        title: Array.from(
+          t("In 1 hour: {title}", {
+            title: item.alarm_title || "Mewmo reminder",
+          }),
+        )
+          .slice(0, 180)
+          .join(""),
+        fireAt: new Date(item.due_at).getTime() / 1000 - 3600,
+      })),
+  );
   return queue(async () => {
     // A list requested before an edit must not undo the newly scheduled alarm.
     if (options.complete && expected !== revision) return snapshot;
@@ -164,7 +183,11 @@ export function syncAlarms(
   });
 }
 
-export function alarmMessage(item: Item, state = snapshot): string {
+export function alarmMessage(
+  item: Item,
+  state = snapshot,
+  early = false,
+): string {
   if (state.error) return state.error;
   if (!item.urgent || item.status !== "open")
     return "No urgent alarm needed for this item.";
@@ -174,20 +197,24 @@ export function alarmMessage(item: Item, state = snapshot): string {
     return "No alarm scheduled. Allow alarm access on this iPhone.";
   if (!state.enabled)
     return "No alarm scheduled. Enable urgent alarms on this iPhone.";
+  if (early && !item.early_alarm_id)
+    return "Update the server to enable the one-hour alarm.";
   const messages: Record<string, string> = {
     scheduled: "Alarm scheduled on this iPhone.",
     alerting: "Alarm is ringing on this iPhone.",
     ended: "Alarm ended or was dismissed. The item is still open.",
     not_scheduled:
       "Alarm was removed on this iPhone. Tap Schedule alarm to restore it.",
-    past: "No alarm scheduled: the due time has already passed.",
+    past: early
+      ? "No one-hour alarm scheduled: that time has already passed."
+      : "No alarm scheduled: the due time has already passed.",
     limit: "No alarm scheduled: this iPhone has reached its alarm limit.",
     failed:
       "Could not schedule the alarm. Ordinary notifications are unchanged.",
   };
   return (
-    messages[state.states[item.id]] ??
-    (new Date(item.due_at).getTime() <= Date.now()
+    messages[state.states[early ? item.early_alarm_id! : item.id]] ??
+    (new Date(item.due_at).getTime() - (early ? 3600000 : 0) <= Date.now()
       ? messages.past
       : "No alarm scheduled on this iPhone yet.")
   );

@@ -285,7 +285,14 @@ export function Editor({
           <input
             type="checkbox"
             checked={value.urgent === true}
-            onChange={(event) => field("urgent", event.target.checked)}
+            onChange={(event) => {
+              const urgent = event.target.checked;
+              setValue((old) => ({
+                ...old,
+                urgent,
+                rules: !urgent && draft.urgent ? defaults(old.kind) : old.rules,
+              }));
+            }}
           />
           {t("Urgent alarm")}
         </label>
@@ -294,7 +301,7 @@ export function Editor({
             <div>
               <p>
                 {t(
-                  "One alarm at the due time. Sounds through Silent mode and Focus; iPhone controls the volume.",
+                  "Traditional alarms 1 hour before and at the due time. Past alerts are skipped. Sounds through Silent mode and Focus; iPhone controls the volume.",
                 )}
               </p>
               <p>
@@ -365,95 +372,125 @@ export function Editor({
             <span className="muted">
               {value.status !== "open"
                 ? t("Paused")
-                : value.rules.length === 0
-                  ? t("None")
-                  : value.rules.length}
+                : value.urgent
+                  ? t("Automatic")
+                  : value.rules.length === 0
+                    ? t("None")
+                    : value.rules.length}
             </span>
           </summary>
-          <div className="section-heading">
-            <button
-              type="button"
-              className="text-button"
-              onClick={() => field("rules", defaults(value.kind))}
-            >
-              {t("Reset defaults")}
-            </button>
-          </div>
-          {value.status !== "open" && (
-            <p className="muted">
-              {t("Reminders are paused while this item is finished.")}
-            </p>
-          )}
-          {value.rules.map((r, i) => (
-            <div className="rule-row" key={i}>
-              <select
-                aria-label={t("Reminder {number} mode", { number: i + 1 })}
-                value={r.mode}
-                onChange={(e) =>
-                  rule(i, { mode: e.target.value as Rule["mode"] })
-                }
-              >
-                <option value="before">{t("Minutes before")}</option>
-                <option value="day">{t("Days from due date")}</option>
-              </select>
-              <input
-                aria-label={t("Reminder {number} offset", { number: i + 1 })}
-                type="number"
-                min={r.mode === "before" ? 0 : -365}
-                max={r.mode === "before" ? 525600 : 365}
-                required
-                value={r.mode === "before" ? r.minutes : r.days}
-                onChange={(e) =>
-                  rule(i, {
-                    [r.mode === "before" ? "minutes" : "days"]: Number(
-                      e.target.value,
-                    ),
-                  })
-                }
-              />
-              {r.mode === "day" && (
-                <input
-                  type="time"
-                  aria-label={t("Reminder {number} time", { number: i + 1 })}
-                  required
-                  value={r.at}
-                  onChange={(e) => rule(i, { at: e.target.value })}
-                />
+          {value.urgent ? (
+            <div className="urgent-policy">
+              <p>
+                {t(
+                  "More than 10 days away: remind 7 days, 1 day and 1 hour before.",
+                )}
+              </p>
+              <p>
+                {t(
+                  "3-10 days away: remind 1 day and 1 hour before. Under 3 days: remind 1 hour before.",
+                )}
+              </p>
+              <p className="muted small">
+                {t(
+                  "Chosen when you save, using 24-hour days. Past alerts are skipped. Turning urgency off restores ordinary defaults.",
+                )}
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="section-heading">
+                <button
+                  type="button"
+                  className="text-button"
+                  onClick={() => field("rules", defaults(value.kind))}
+                >
+                  {t("Reset defaults")}
+                </button>
+              </div>
+              {value.status !== "open" && (
+                <p className="muted">
+                  {t("Reminders are paused while this item is finished.")}
+                </p>
               )}
+              {value.rules.map((r, i) => (
+                <div className="rule-row" key={i}>
+                  <select
+                    aria-label={t("Reminder {number} mode", { number: i + 1 })}
+                    value={r.mode}
+                    onChange={(e) =>
+                      rule(i, { mode: e.target.value as Rule["mode"] })
+                    }
+                  >
+                    <option value="before">{t("Minutes before")}</option>
+                    <option value="day">{t("Days from due date")}</option>
+                  </select>
+                  <input
+                    aria-label={t("Reminder {number} offset", {
+                      number: i + 1,
+                    })}
+                    type="number"
+                    min={r.mode === "before" ? 0 : -365}
+                    max={r.mode === "before" ? 525600 : 365}
+                    required
+                    value={r.mode === "before" ? r.minutes : r.days}
+                    onChange={(e) =>
+                      rule(i, {
+                        [r.mode === "before" ? "minutes" : "days"]: Number(
+                          e.target.value,
+                        ),
+                      })
+                    }
+                  />
+                  {r.mode === "day" && (
+                    <input
+                      type="time"
+                      aria-label={t("Reminder {number} time", {
+                        number: i + 1,
+                      })}
+                      required
+                      value={r.at}
+                      onChange={(e) => rule(i, { at: e.target.value })}
+                    />
+                  )}
+                  <button
+                    type="button"
+                    className="icon-button"
+                    aria-label={t("Remove reminder {number}", {
+                      number: i + 1,
+                    })}
+                    onClick={() =>
+                      field(
+                        "rules",
+                        value.rules.filter((_, index) => index !== i),
+                      )
+                    }
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              ))}
+              <p className="muted small">
+                {t(
+                  "Days: -1 = before, 0 = due date, +1 = after. Past times are skipped.",
+                )}
+              </p>
               <button
                 type="button"
-                className="icon-button"
-                aria-label={t("Remove reminder {number}", { number: i + 1 })}
+                disabled={value.rules.length >= 20}
+                className="text-button"
                 onClick={() =>
-                  field(
-                    "rules",
-                    value.rules.filter((_, index) => index !== i),
-                  )
+                  field("rules", [
+                    ...value.rules,
+                    { mode: "before", minutes: 30, days: 0, at: "09:00" },
+                  ])
                 }
               >
-                <Trash2 size={16} />
+                <Plus size={15} />
+                {t("Add reminder")}
               </button>
-            </div>
-          ))}
-          <p className="muted small">
-            {t(
-              "Days: -1 = before, 0 = due date, +1 = after. Past times are skipped.",
-            )}
-          </p>
-          <button
-            type="button"
-            disabled={value.rules.length >= 20}
-            className="text-button"
-            onClick={() =>
-              field("rules", [
-                ...value.rules,
-                { mode: "before", minutes: 30, days: 0, at: "09:00" },
-              ])
-            }
-          >
-            <Plus size={15} />
-            {t("Add reminder")}
-          </button>
+            </>
+          )}
         </details>
         {!!value.duplicates.length && (
           <label className="checkbox-label notice">

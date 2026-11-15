@@ -49,7 +49,14 @@ export function UrgentAlarmDetails({
   return (
     <section className="urgent-alarm disclosure">
       <h3>{t("Urgent alarm")}</h3>
-      <p role="status">{t(alarmMessage(item, state))}</p>
+      <div data-alarm="due">
+        <strong>{t("At the due time")}</strong>
+        <p role="status">{t(alarmMessage(item, state))}</p>
+      </div>
+      <div data-alarm="early">
+        <strong>{t("1 hour before")}</strong>
+        <p role="status">{t(alarmMessage(item, state, true))}</p>
+      </div>
       {state.available &&
         item.status === "open" &&
         new Date(item.due_at).getTime() > Date.now() && (
@@ -64,7 +71,7 @@ export function UrgentAlarmDetails({
         )}
       <p className="muted small">
         {t(
-          "One alarm at the due time. Sounds through Silent mode and Focus; iPhone controls the volume.",
+          "Traditional alarms 1 hour before and at the due time. Past alerts are skipped. Sounds through Silent mode and Focus; iPhone controls the volume.",
         )}
       </p>
       <p className="muted small">

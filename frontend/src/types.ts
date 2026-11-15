@@ -34,6 +34,7 @@ export type Item = Omit<
   id: string;
   due_at: string;
   alarm_title?: string;
+  early_alarm_id?: string;
   created_at: string;
   finished_at: string | null;
 };
