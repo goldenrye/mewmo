@@ -76,7 +76,9 @@ export function AgentAccess() {
     <section className="settings-card account-card">
       <h2>{t("Agent access")}</h2>
       <p className="muted">
-        {t("Let trusted agents add reminders through remote MCP.")}
+        {t(
+          "Let trusted agents read and add reminders and notes through remote MCP.",
+        )}
       </p>
       <details
         className="disclosure"
@@ -92,7 +94,7 @@ export function AgentAccess() {
         <summary>{t("Manage agent access")}</summary>
         <p className="muted small">
           {t(
-            "Reminder creation only. No access to notes, account settings, or editing existing items. Keep token access limited to trusted agents.",
+            "Agents can read your reminders and notes and add new ones after confirmation. They cannot edit, complete, or delete existing items, or access account settings. Keep token access limited to trusted agents.",
           )}
         </p>
         {access && (

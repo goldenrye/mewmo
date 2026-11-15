@@ -102,19 +102,13 @@ def list_notes(
     db: Session = Depends(session),
     user: User = Depends(require_user),
 ):
-    condition = Note.user_id == user.id
-    total = db.scalar(select(func.count()).select_from(Note).where(condition))
-    rows = db.scalars(
-        select(Note).where(condition).order_by(Note.updated_at.desc(), Note.id).offset(offset).limit(limit)
-    ).all()
-    return {"items": [note_json(row) for row in rows], "total": total, "mode": "local", "warning": None}
+    return list_user_notes(db, user.id, offset, limit)
 
 
-@router.post("/search")
-def find_notes(body: SearchInput, db: Session = Depends(session), user: User = Depends(require_user)):
-    preference = db.get(ModelPreference, user.id)
-    use_ai = bool(preference and preference.allow_note_search and body.use_ai is not False)
-    terms, mode, warning = search_terms(body.query, preference, use_ai)
+def search_user_notes(db: Session, user_id: str, query: str, offset: int, limit: int, use_ai: bool | None):
+    preference = db.get(ModelPreference, user_id)
+    use_ai = bool(preference and preference.allow_note_search and use_ai is not False)
+    terms, mode, warning = search_terms(query, preference, use_ai)
     if not terms:
         return {"items": [], "total": 0, "mode": mode, "warning": warning}
     # Bound parameters and escaped LIKE patterns keep dictated text literal.
@@ -122,26 +116,39 @@ def find_notes(body: SearchInput, db: Session = Depends(session), user: User = D
         case((Note.search_text.contains(term, autoescape=True), weight), else_=0)
         for term, weight in terms.items()
     )
-    condition = (Note.user_id == user.id) & (score > 0)
+    condition = (Note.user_id == user_id) & (score > 0)
     total = db.scalar(select(func.count()).select_from(Note).where(condition))
     rows = db.scalars(
         select(Note)
         .where(condition)
         .order_by(score.desc(), Note.updated_at.desc(), Note.id)
-        .offset(body.offset)
-        .limit(body.limit)
+        .offset(offset)
+        .limit(limit)
     ).all()
     return {"items": [note_json(row) for row in rows], "total": total, "mode": mode, "warning": warning}
 
 
+def list_user_notes(db: Session, user_id: str, offset: int, limit: int):
+    condition = Note.user_id == user_id
+    total = db.scalar(select(func.count()).select_from(Note).where(condition))
+    rows = db.scalars(
+        select(Note).where(condition).order_by(Note.updated_at.desc(), Note.id).offset(offset).limit(limit)
+    ).all()
+    return {"items": [note_json(row) for row in rows], "total": total, "mode": "local", "warning": None}
+
+
+def new_note(user_id: str, title: str, body: str) -> Note:
+    return Note(user_id=user_id, title=title, body=body, search_text=normalize(title + "\n" + body))
+
+
+@router.post("/search")
+def find_notes(body: SearchInput, db: Session = Depends(session), user: User = Depends(require_user)):
+    return search_user_notes(db, user.id, body.query, body.offset, body.limit, body.use_ai)
+
+
 @router.post("", status_code=201)
 def create_note(body: NoteInput, db: Session = Depends(session), user: User = Depends(require_user)):
-    note = Note(
-        user_id=user.id,
-        title=body.title,
-        body=body.body,
-        search_text=normalize(body.title + "\n" + body.body),
-    )
+    note = new_note(user.id, body.title, body.body)
     db.add(note)
     db.commit()
     return note_json(note)

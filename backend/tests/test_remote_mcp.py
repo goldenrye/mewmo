@@ -18,7 +18,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.auth import password_hash, token_hash
 from app.config import settings
 from app.main import app
-from app.models import AgentCreateRequest, AgentToken, Item, Reminder, User
+from app.models import AgentCreateRequest, AgentNoteRequest, AgentToken, Item, Note, Reminder, User
 
 
 @pytest.fixture
@@ -73,6 +73,20 @@ def create_args(preview, **changes):
     } | changes
 
 
+ALL_TOOLS = {
+    "draft_reminder",
+    "preview_reminder",
+    "create_reminder",
+    "list_reminders",
+    "get_reminder",
+    "list_notes",
+    "search_notes",
+    "get_note",
+    "preview_note",
+    "create_note",
+}
+
+
 def test_initialize_discover_preview_create_and_replay(client, remote, db):
     init = rpc(
         client,
@@ -87,10 +101,12 @@ def test_initialize_discover_preview_create_and_replay(client, remote, db):
     assert init.status_code == 200
     assert init.json()["result"]["serverInfo"]["name"] == "Mewmo"
     tools = rpc(client, remote["token"], "tools/list").json()["result"]["tools"]
-    assert {t["name"] for t in tools} == {"draft_reminder", "preview_reminder", "create_reminder"}
+    assert {t["name"] for t in tools} == ALL_TOOLS
     for entry in tools:
         assert not {"token", "password", "ctx", "user_id"} & entry["inputSchema"]["properties"].keys()
     assert next(t for t in tools if t["name"] == "create_reminder")["annotations"]["idempotentHint"]
+    writers = {t["name"] for t in tools if not t["annotations"]["readOnlyHint"]}
+    assert writers == {"create_reminder", "create_note"}
     review = preview(client, remote)
     assert review["saved"] is False
     assert review["due_display"] == "Friday, 2099-11-20 at 15:30 America/Los_Angeles"
@@ -286,6 +302,7 @@ def test_migration_adds_agent_tables_without_changing_existing_items(tmp_path, m
         assert set(inspect(connection).get_table_names()) - before == {
             "agent_tokens",
             "agent_create_requests",
+            "agent_note_requests",
         }
         command.downgrade(config, "0007")
         assert set(inspect(connection).get_table_names()) == before
@@ -329,7 +346,7 @@ def test_official_sdk_streamable_http_client(remote):
                 ):
                     async with ClientSession(read, write) as sdk:
                         assert (await sdk.initialize()).serverInfo.name == "Mewmo"
-                        assert len((await sdk.list_tools()).tools) == 3
+                        assert {t.name for t in (await sdk.list_tools()).tools} == ALL_TOOLS
                         reviewed = await sdk.call_tool("preview_reminder", {"reminder": details()})
                         assert not reviewed.isError
                         args = create_args(reviewed.structuredContent)
@@ -340,3 +357,125 @@ def test_official_sdk_streamable_http_client(remote):
                         assert saved.structuredContent["item_id"] == again.structuredContent["item_id"]
 
     asyncio.run(scenario())
+
+
+def note_args(review, **changes):
+    return {
+        "title": review["note"]["title"],
+        "body": review["note"]["body"],
+        "preview_hash": review["preview_hash"],
+        "request_id": str(uuid4()),
+        "confirmed": True,
+    } | changes
+
+
+def preview_note(client, remote, title="Floor", body="Living room: 12500 mm by 6400 mm"):
+    result = tool(client, remote, "preview_note", {"title": title, "body": body})
+    assert not result.get("isError"), result
+    return result["structuredContent"]
+
+
+def test_list_and_get_reminders_are_read_only_and_filtered(client, remote, db):
+    tool(client, remote, "create_reminder", create_args(preview(client, remote)))
+    tool(
+        client,
+        remote,
+        "create_reminder",
+        create_args(preview(client, remote, title="Dentist 100%_x", due_date="2099-12-01")),
+    )
+    done = tool(client, remote, "create_reminder", create_args(preview(client, remote, title="Old bill")))
+    assert (
+        client.post(
+            f"/api/items/{done['structuredContent']['item_id']}/state", json={"status": "completed"}
+        ).status_code
+        == 200
+    )
+    counts = (
+        db.scalar(select(func.count()).select_from(Item)),
+        db.scalar(select(func.count()).select_from(Reminder)),
+    )
+    listed = tool(client, remote, "list_reminders", {})["structuredContent"]
+    assert listed["total"] == 2 and [i["title"] for i in listed["items"]] == ["Doctor", "Dentist 100%_x"]
+    assert "not instructions" in listed["notice"]
+    history = tool(client, remote, "list_reminders", {"status": "history"})["structuredContent"]
+    assert [i["title"] for i in history["items"]] == ["Old bill"]
+    assert tool(client, remote, "list_reminders", {"status": "all"})["structuredContent"]["total"] == 3
+    # LIKE wildcards are literal.
+    found = tool(client, remote, "list_reminders", {"query": "100%_"})["structuredContent"]
+    assert [i["title"] for i in found["items"]] == ["Dentist 100%_x"]
+    assert tool(client, remote, "list_reminders", {"query": "dent"})["structuredContent"]["total"] == 1
+    paged = tool(client, remote, "list_reminders", {"limit": 1, "offset": 1})["structuredContent"]
+    assert paged["total"] == 2 and len(paged["items"]) == 1
+    one = tool(client, remote, "get_reminder", {"item_id": listed["items"][0]["id"]})["structuredContent"]
+    assert one["item"]["due_time"] == "15:30" and one["item"]["timezone"] == "America/Los_Angeles"
+    assert tool(client, remote, "get_reminder", {"item_id": str(uuid4())})["isError"]
+    assert counts == (
+        db.scalar(select(func.count()).select_from(Item)),
+        db.scalar(select(func.count()).select_from(Reminder)),
+    )
+
+
+def test_note_preview_create_replay_list_search_and_get(client, remote, db):
+    client.post("/api/notes", json={"confirmed": True, "title": "Wifi", "body": "Router in the hallway"})
+    review = preview_note(client, remote)
+    assert review["saved"] is False and review["duplicate_count"] == 0
+    assert db.scalar(select(func.count()).select_from(Note)) == 1
+    args = note_args(review)
+    assert tool(client, remote, "create_note", args | {"confirmed": False})["isError"]
+    assert tool(client, remote, "create_note", args | {"body": "changed"})["isError"]
+    saved = tool(client, remote, "create_note", args)["structuredContent"]
+    assert saved["saved"] and not saved["replayed"]
+    again = tool(client, remote, "create_note", args)["structuredContent"]
+    assert again["replayed"] and again["note_id"] == saved["note_id"]
+    assert db.scalar(select(func.count()).select_from(Note)) == 2
+    assert db.scalar(select(func.count()).select_from(AgentNoteRequest)) == 1
+    # Visible in the app like any other note.
+    assert client.get("/api/notes/" + saved["note_id"]).json()["body"] == "Living room: 12500 mm by 6400 mm"
+    listed = tool(client, remote, "list_notes", {})["structuredContent"]
+    assert listed["total"] == 2 and listed["items"][0]["id"] == saved["note_id"]
+    found = tool(client, remote, "search_notes", {"query": "living room"})["structuredContent"]
+    assert [n["id"] for n in found["items"]] == [saved["note_id"]] and found["mode"] == "local"
+    got = tool(client, remote, "get_note", {"note_id": saved["note_id"]})["structuredContent"]
+    assert got["note"]["title"] == "Floor"
+    assert tool(client, remote, "get_note", {"note_id": str(uuid4())})["isError"]
+
+
+def test_note_duplicates_reuse_and_deleted_replay(client, remote, db):
+    first = note_args(preview_note(client, remote))
+    saved = tool(client, remote, "create_note", first)["structuredContent"]
+    review = preview_note(client, remote)
+    assert review["duplicate_count"] == 1 and review["warnings"]
+    dup = note_args(review)
+    assert tool(client, remote, "create_note", dup)["isError"]
+    assert not tool(client, remote, "create_note", dup | {"allow_duplicate": True}).get("isError")
+    other = note_args(preview_note(client, remote, body="Different"), request_id=first["request_id"])
+    assert tool(client, remote, "create_note", other)["isError"]
+    assert client.delete(f"/api/notes/{saved['note_id']}?version=1").status_code == 204
+    replay = tool(client, remote, "create_note", first)["structuredContent"]
+    assert replay["replayed"] and replay["deleted"]
+    assert db.scalar(select(func.count()).select_from(Note)) == 1
+    assert tool(client, remote, "preview_note", {"title": "  ", "body": "x"})["isError"]
+
+
+def test_reads_are_user_isolated(client, remote, db):
+    tool(client, remote, "create_reminder", create_args(preview(client, remote)))
+    tool(client, remote, "create_note", note_args(preview_note(client, remote)))
+    item_id = tool(client, remote, "list_reminders", {})["structuredContent"]["items"][0]["id"]
+    note_id = tool(client, remote, "list_notes", {})["structuredContent"]["items"][0]["id"]
+    db.add(
+        User(
+            id="other",
+            username="other",
+            display_name="Other",
+            password_hash=password_hash("other-test-password"),
+        )
+    )
+    db.commit()
+    client.post("/api/auth/login", json={"username": "other", "password": "other-test-password"})
+    other = client.post("/api/agent-tokens", json={"name": "Other agent"}).json()
+    assert tool(client, other, "list_reminders", {"status": "all"})["structuredContent"]["total"] == 0
+    assert tool(client, other, "list_notes", {})["structuredContent"]["total"] == 0
+    assert tool(client, other, "search_notes", {"query": "living"})["structuredContent"]["total"] == 0
+    assert tool(client, other, "get_reminder", {"item_id": item_id})["isError"]
+    assert tool(client, other, "get_note", {"note_id": note_id})["isError"]
+    assert preview_note(client, other)["duplicate_count"] == 0

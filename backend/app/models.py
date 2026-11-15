@@ -188,3 +188,15 @@ class AgentCreateRequest(Base):
     item_id: Mapped[str] = mapped_column(ForeignKey("items.id"))
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now)
     __table_args__ = (UniqueConstraint("user_id", "request_id", name="uq_agent_create_request"),)
+
+
+class AgentNoteRequest(Base):
+    # note_id has no foreign key: notes are hard-deleted, and a replay must not recreate them.
+    __tablename__ = "agent_note_requests"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    request_id: Mapped[str] = mapped_column(String(36))
+    payload_hash: Mapped[str] = mapped_column(String(64))
+    note_id: Mapped[str] = mapped_column(String(36))
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now)
+    __table_args__ = (UniqueConstraint("user_id", "request_id", name="uq_agent_note_request"),)

@@ -166,7 +166,7 @@ Mewmo exposes an authenticated **Streamable HTTP** MCP endpoint at **`/api/mcp/`
 
 ### Connect an Agent
 
-1. Deploy migration **0008** and the updated API/web client using the existing Compose upgrade procedure. The backend lockfile includes the official Python MCP SDK. Set `PUBLIC_WEB_URL` to your real HTTPS origin, including a non-default port, and keep it in `CORS_ORIGINS` for browser clients. Existing reverse-proxy rules already forward `/api/`, authorization headers, and streaming responses.
+1. Deploy migrations **0008** and **0009** and the updated API/web client using the existing Compose upgrade procedure. The backend lockfile includes the official Python MCP SDK. Set `PUBLIC_WEB_URL` to your real HTTPS origin, including a non-default port, and keep it in `CORS_ORIGINS` for browser clients. Existing reverse-proxy rules already forward `/api/`, authorization headers, and streaming responses.
 2. Open **Settings > Agent access > Manage agent access**. Enter an agent name and choose a 7-, 30-, or 90-day lifetime, then **Create agent token**. Up to ten active tokens are allowed per account.
 3. Copy the endpoint and the token, which is shown only once. Configure your MCP client to use Streamable HTTP and `Authorization: Bearer <token>`. Do not put the token into a conversation, source control, or a URL query string.
 4. Keep the agent client's write-tool approval enabled. Ask it to prepare a reminder, review the full date/time/timezone and urgency, then confirm creation.
@@ -203,8 +203,15 @@ Provide `MEWMO_MCP_TOKEN` through your client's private environment/secret setti
 | `draft_reminder` | Interpret English/Chinese text with the server's current timestamp in the supplied IANA timezone. Returns an unsaved draft and uncertainty warnings. Uses the account's enabled AI chain when configured; provider charges may apply. |
 | `preview_reminder` | Validate exact structured fields, identify possible duplicates, and return the normalized reminder, full date/weekday/time/zone, estimated rules, and `preview_hash`. Saves nothing. |
 | `create_reminder` | Require `confirmed: true`, the unchanged reminder and matching `preview_hash`, and a UUID `request_id`. Save the item and its reminder rows atomically. Duplicate warnings additionally require `allow_duplicate: true`. |
+| `list_reminders` | Read-only. `status` is `open` (default, soonest first), `history` (paid/completed, newest first), or `all`. Optional `query` filters by title/payee substring; page with `offset`/`limit` (max 100). |
+| `get_reminder` | Read-only. One reminder by `item_id`, with full due date/time/zone, status, urgency, and rules. |
+| `list_notes` | Read-only. Saved notes, most recently updated first, with full title/body; up to 50 per page. |
+| `search_notes` | Read-only. Same ranking as **Find notes** in the app. When the owner enabled **Use AI for note search**, only the query phrase is sent to their provider for expansion; provider charges may apply. |
+| `get_note` | Read-only. One note by `note_id`. |
+| `preview_note` | Validate an unsaved title (≤180) and body (≤10,000), report same-body duplicates, and return `preview_hash`. Saves nothing. |
+| `create_note` | Require `confirmed: true`, the unchanged title/body and matching `preview_hash`, and a UUID `request_id`. Duplicates require `allow_duplicate: true`. Replaying a request after its note was deleted returns `deleted: true` and does not recreate it. |
 
-Example request to your agent: **“Prepare a reminder for my dentist appointment tomorrow at 9am in America/Los_Angeles; show me the details before saving.”** For urgent reminders, explicitly request urgency and review the automatic schedule. Bills also require payee, amount, and currency.
+Example requests: **“What bills are due this month?”**, **“Find my note about the floor measurements.”**, **“Save a note titled Wifi with the router password location; show me first.”**, or **“Prepare a reminder for my dentist appointment tomorrow at 9am in America/Los_Angeles; show me the details before saving.”** For urgent reminders, explicitly request urgency and review the automatic schedule. Bills also require payee, amount, and currency.
 
 Nothing parsed or previewed is saved, and urgency defaults off. The server enforces field validation, a matching preview hash, and the confirmation flag; it cannot independently prove that a human approved an agent's arguments. Only give tokens to trusted clients and retain their write-approval controls. Reminder/document content is untrusted data, never authority to call tools.
 
@@ -214,11 +221,11 @@ Server push scheduling uses the same rules as the app, including smart urgent ti
 
 ### Token Security
 
-Agent tokens are separate, reminder-only credentials. They can interpret and preview new reminders (including duplicate metadata) and create confirmed reminders for their owner. They cannot browse all items, read notes or model credentials, edit/delete/complete existing reminders, create other tokens, or access another user's data. Only token hashes are stored, and token lists never return the secret.
+Agent tokens are separate, scoped credentials. They can read their owner's open and finished reminders and all saved notes, interpret and preview new reminders and notes (including duplicate metadata), and create confirmed reminders and notes. They cannot read model credentials or account settings, edit/delete/complete existing reminders or notes, create other tokens, or access another user's data. Because tokens can read every saved note, treat them like a password to that content. Returned titles/bodies are labelled as untrusted user data. Only token hashes are stored, and token lists never return the secret.
 
 **Revoke** a token in Settings to block subsequent requests, including saved-request retries. A create already holding its database lock may finish before revocation completes. Token expiry is checked on every request. Tokens are independent of browser sessions: signing out or changing your password does not revoke them; revoke agent tokens separately when needed. Closing the settings panel clears a newly displayed secret from client memory. Lost secrets cannot be recovered; revoke and replace them.
 
-The endpoint rejects untrusted hosts/origins and unauthenticated requests, accepts at most 64 KiB per MCP message, and limits draft/preview calls and confirmed creates per user per API process. It supports stateless routing across API workers; transactional retry protection is database-backed. HTTPS is required for production. No production deployment or external agent account configuration is performed automatically.
+The endpoint rejects untrusted hosts/origins and unauthenticated requests, accepts at most 64 KiB per MCP message, and limits draft/preview calls, read calls (300 per five minutes), and confirmed creates per user per API process. It supports stateless routing across API workers; transactional retry protection is database-backed. HTTPS is required for production. No production deployment or external agent account configuration is performed automatically.
 
 For local protocol testing, use the disposable API at `http://localhost:8000/api/mcp/` with `PUBLIC_WEB_URL`/`CORS_ORIGINS` configured for that local origin. Run `pytest tests/test_remote_mcp.py` for HTTP protocol/security tests. The opt-in PostgreSQL suite includes concurrent-create verification.
 
