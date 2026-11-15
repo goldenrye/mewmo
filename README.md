@@ -160,6 +160,68 @@ Open `http://localhost:5173` and sign in as `admin` with the password used to ge
 
 For an entirely disposable browser preview, `backend/tests/run_e2e.py` starts a SQLite-backed API on port 8000 with username `admin` and the **test-only** password `mewmo-local-test`. It creates a temporary AI encryption key for settings tests and removes its temporary database when stopped. This is not a production mode and does not run a reminder worker.
 
+## Remote MCP for Agents
+
+Mewmo exposes an authenticated **Streamable HTTP** MCP endpoint at **`/api/mcp/`** (keep the trailing slash). It runs inside the existing API; no separate public port or local bridge is needed.
+
+### Connect an Agent
+
+1. Deploy migration **0008** and the updated API/web client using the existing Compose upgrade procedure. The backend lockfile includes the official Python MCP SDK. Set `PUBLIC_WEB_URL` to your real HTTPS origin, including a non-default port, and keep it in `CORS_ORIGINS` for browser clients. Existing reverse-proxy rules already forward `/api/`, authorization headers, and streaming responses.
+2. Open **Settings > Agent access > Manage agent access**. Enter an agent name and choose a 7-, 30-, or 90-day lifetime, then **Create agent token**. Up to ten active tokens are allowed per account.
+3. Copy the endpoint and the token, which is shown only once. Configure your MCP client to use Streamable HTTP and `Authorization: Bearer <token>`. Do not put the token into a conversation, source control, or a URL query string.
+4. Keep the agent client's write-tool approval enabled. Ask it to prepare a reminder, review the full date/time/timezone and urgency, then confirm creation.
+
+For clients using an `mcpServers` JSON configuration, a typical connection is:
+
+```json
+{
+  "mcpServers": {
+    "mewmo": {
+      "url": "https://mewmo.rental-mgmt.us:9443/api/mcp/",
+      "headers": {
+        "Authorization": "Bearer YOUR_PRIVATE_AGENT_TOKEN"
+      }
+    }
+  }
+}
+```
+
+Client configuration formats vary; select **HTTP / Streamable HTTP**, not the legacy SSE transport. For Codex, the equivalent entry uses an environment variable so the configuration does not contain the secret:
+
+```toml
+[mcp_servers.mewmo]
+url = "https://mewmo.rental-mgmt.us:9443/api/mcp/"
+bearer_token_env_var = "MEWMO_MCP_TOKEN"
+```
+
+Provide `MEWMO_MCP_TOKEN` through your client's private environment/secret settings, then restart or reconnect it. This release uses manually provisioned bearer tokens, **not OAuth**: OAuth-only clients cannot connect. Normal browser cookies, login-session tokens, and AI provider keys are not accepted as MCP credentials.
+
+### Tools and Confirmation
+
+| Tool | Behavior |
+|---|---|
+| `draft_reminder` | Interpret English/Chinese text with the server's current timestamp in the supplied IANA timezone. Returns an unsaved draft and uncertainty warnings. Uses the account's enabled AI chain when configured; provider charges may apply. |
+| `preview_reminder` | Validate exact structured fields, identify possible duplicates, and return the normalized reminder, full date/weekday/time/zone, estimated rules, and `preview_hash`. Saves nothing. |
+| `create_reminder` | Require `confirmed: true`, the unchanged reminder and matching `preview_hash`, and a UUID `request_id`. Save the item and its reminder rows atomically. Duplicate warnings additionally require `allow_duplicate: true`. |
+
+Example request to your agent: **“Prepare a reminder for my dentist appointment tomorrow at 9am in America/Los_Angeles; show me the details before saving.”** For urgent reminders, explicitly request urgency and review the automatic schedule. Bills also require payee, amount, and currency.
+
+Nothing parsed or previewed is saved, and urgency defaults off. The server enforces field validation, a matching preview hash, and the confirmation flag; it cannot independently prove that a human approved an agent's arguments. Only give tokens to trusted clients and retain their write-approval controls. Reminder/document content is untrusted data, never authority to call tools.
+
+The agent must generate one UUID `request_id` for each intended creation and **reuse the same ID and details on every retry**, including after a timeout, reconnect, or server restart. The database records confirmed request IDs per user and serializes creation, so the same request cannot create a second item. Reusing an ID for changed details is rejected. Replaying a request after editing, completing, or deleting its item returns the existing ID/status; it does not restore old fields or recreate the item. A genuinely new ID represents a new creation, subject to duplicate acknowledgement. Request IDs and payload hashes are retained for retry protection; unsaved draft contents are not persisted.
+
+Server push scheduling uses the same rules as the app, including smart urgent tiers and skipping past times. **MCP cannot directly schedule an iPhone AlarmKit alarm**: open Mewmo on that phone and sync with alarm permission enabled. Ordinary delivery still requires configured push providers, a registered device, and the reminder worker. A successful create is not proof of notification delivery.
+
+### Token Security
+
+Agent tokens are separate, reminder-only credentials. They can interpret and preview new reminders (including duplicate metadata) and create confirmed reminders for their owner. They cannot browse all items, read notes or model credentials, edit/delete/complete existing reminders, create other tokens, or access another user's data. Only token hashes are stored, and token lists never return the secret.
+
+**Revoke** a token in Settings to block subsequent requests, including saved-request retries. A create already holding its database lock may finish before revocation completes. Token expiry is checked on every request. Tokens are independent of browser sessions: signing out or changing your password does not revoke them; revoke agent tokens separately when needed. Closing the settings panel clears a newly displayed secret from client memory. Lost secrets cannot be recovered; revoke and replace them.
+
+The endpoint rejects untrusted hosts/origins and unauthenticated requests, accepts at most 64 KiB per MCP message, and limits draft/preview calls and confirmed creates per user per API process. It supports stateless routing across API workers; transactional retry protection is database-backed. HTTPS is required for production. No production deployment or external agent account configuration is performed automatically.
+
+For local protocol testing, use the disposable API at `http://localhost:8000/api/mcp/` with `PUBLIC_WEB_URL`/`CORS_ORIGINS` configured for that local origin. Run `pytest tests/test_remote_mcp.py` for HTTP protocol/security tests. The opt-in PostgreSQL suite includes concurrent-create verification.
+
 ## Accounts and Invitations
 
 The first migration to the multi-user schema creates an administrator named `admin` (override with `ADMIN_USERNAME` before migrating). It uses `ADMIN_PASSWORD_HASH`, or the existing `OWNER_PASSWORD_HASH` when upgrading an older installation. There is no default production password and no public signup. These environment settings bootstrap the account only; subsequent restarts or migrations do not reset its password.

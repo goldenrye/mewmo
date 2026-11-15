@@ -17,6 +17,7 @@ dependencies = [
   "dateparser>=1.2,<2",
   "Pillow>=11,<13",
   "pillow-heif>=1,<2",
+  "mcp>=1.30,<2",
 ]
 
 [project.optional-dependencies]

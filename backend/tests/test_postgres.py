@@ -88,6 +88,11 @@ def test_alembic_creates_postgres_schema(postgres):
         "auth_sessions",
         "users",
         "invitations",
+        "model_preferences",
+        "model_fallbacks",
+        "notes",
+        "agent_tokens",
+        "agent_create_requests",
     }
     item_id, _ = seed(postgres)
     with Session(postgres) as db:
@@ -197,3 +202,79 @@ def test_device_disable_commit_blocks_waiting_push(postgres):
         future.result(timeout=10)
     with Session(postgres) as db:
         assert db.get(Reminder, reminder_id).status == "failed"
+
+
+def test_concurrent_mcp_retries_create_one_item(postgres, monkeypatch):
+    from app.accounts import attempts
+
+    attempts.clear()
+    monkeypatch.setattr("app.remote_mcp.engine", lambda: postgres)
+    monkeypatch.setattr(settings(), "public_web_url", "http://localhost:5173")
+
+    def request_session():
+        with Session(postgres) as db:
+            yield db
+
+    app.dependency_overrides[session] = request_session
+    try:
+        with TestClient(app) as client:
+            assert (
+                client.post(
+                    "/api/auth/login", json={"username": "admin", "password": "postgres-test-only"}
+                ).status_code
+                == 200
+            )
+            token = client.post("/api/agent-tokens", json={"name": "Concurrent"}).json()["token"]
+
+            def call(name, arguments):
+                response = client.post(
+                    "/api/mcp/",
+                    headers={
+                        "Host": "localhost",
+                        "Authorization": "Bearer " + token,
+                        "Accept": "application/json, text/event-stream",
+                    },
+                    json={
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": "tools/call",
+                        "params": {"name": name, "arguments": arguments},
+                    },
+                )
+                assert response.status_code == 200
+                result = response.json()["result"]
+                assert not result.get("isError"), result
+                return result["structuredContent"]
+
+            review = call(
+                "preview_reminder",
+                {
+                    "reminder": {
+                        "title": "One item",
+                        "due_date": "2099-11-20",
+                        "due_time": "09:00",
+                        "timezone": "UTC",
+                    }
+                },
+            )
+            args = {
+                "reminder": review["reminder"],
+                "preview_hash": review["preview_hash"],
+                "confirmed": True,
+                "request_id": str(uuid.uuid4()),
+            }
+            barrier = threading.Barrier(2)
+
+            def save():
+                barrier.wait(timeout=5)
+                return call("create_reminder", args)
+
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                first, second = pool.submit(save), pool.submit(save)
+                results = [first.result(timeout=15), second.result(timeout=15)]
+            assert results[0]["item_id"] == results[1]["item_id"]
+            assert sorted(result["replayed"] for result in results) == [False, True]
+            with Session(postgres) as db:
+                assert len(db.scalars(select(Item)).all()) == 1
+    finally:
+        app.dependency_overrides.clear()

@@ -5,6 +5,7 @@ import { Copy, Link } from "lucide-react";
 import { api } from "./api";
 import { BiometricSettings } from "./BiometricSettings";
 import { AISettings } from "./AISettings";
+import { AgentAccess } from "./AgentAccess";
 import type { Account, Invitation, ModelSettings } from "./types";
 
 export function AccountSettings({
@@ -108,6 +109,7 @@ export function AccountSettings({
         </details>
       </section>
       <AISettings onChange={onModelChange} />
+      <AgentAccess key={account.user.id} />
       {account.user.is_admin && <Invitations />}
     </div>
   );

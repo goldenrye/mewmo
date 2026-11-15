@@ -1,5 +1,6 @@
 import hashlib
 import re
+from contextlib import asynccontextmanager
 from datetime import UTC, date, datetime
 from uuid import NAMESPACE_URL, uuid5
 from zoneinfo import ZoneInfo
@@ -15,6 +16,7 @@ from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from .accounts import router as accounts_router
+from .agent_tokens import router as agent_tokens_router
 from .ai_assistance import AI_FAILURE, assist_draft
 from .auth import client_key_hash, require_user
 from .config import settings
@@ -27,9 +29,20 @@ from .notes import router as notes_router
 from .parsing import ParseFailure, extract_file, parse_text
 from .push import valid_web_endpoint
 from .reminders import notification_title, reconcile, urgent_rules
+from .remote_mcp import AgentBearerGate, create_server, mounted_mcp
 from .schemas import Draft, ItemInput, ParseRequest, StateInput, default_rules
 
-app = FastAPI(title="Mewmo")
+
+@asynccontextmanager
+async def lifespan(_app):
+    # Each ASGI lifespan owns its manager, including repeated/concurrent test clients.
+    mcp_server = create_server(apply_input, item_json, text_draft, duplicates)
+    mcp_app = AgentBearerGate(mcp_server.streamable_http_app())
+    async with mcp_server.session_manager.run():
+        yield {"mcp_app": mcp_app}
+
+
+app = FastAPI(title="Mewmo", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings().origins,
@@ -42,6 +55,7 @@ app.add_middleware(
         "X-Client-Timezone",
         "X-Client-Key",
         "X-Account-ID",
+        "MCP-Protocol-Version",
     ],
 )
 
@@ -458,3 +472,6 @@ app.include_router(router)
 app.include_router(accounts_router)
 app.include_router(model_settings_router)
 app.include_router(notes_router)
+app.include_router(agent_tokens_router)
+
+app.mount("/api/mcp", mounted_mcp)
