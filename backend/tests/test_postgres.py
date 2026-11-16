@@ -93,6 +93,7 @@ def test_alembic_creates_postgres_schema(postgres):
         "notes",
         "agent_tokens",
         "agent_create_requests",
+        "agent_note_requests",
     }
     item_id, _ = seed(postgres)
     with Session(postgres) as db:

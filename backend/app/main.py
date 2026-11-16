@@ -29,7 +29,7 @@ from .notes import router as notes_router
 from .parsing import ParseFailure, extract_file, parse_text
 from .push import valid_web_endpoint
 from .reminders import notification_title, reconcile, urgent_rules
-from .remote_mcp import AgentBearerGate, create_server, mounted_mcp
+from .remote_mcp import AgentCredentialGate, create_server, mounted_mcp
 from .schemas import Draft, ItemInput, ParseRequest, StateInput, default_rules
 
 
@@ -37,7 +37,7 @@ from .schemas import Draft, ItemInput, ParseRequest, StateInput, default_rules
 async def lifespan(_app):
     # Each ASGI lifespan owns its manager, including repeated/concurrent test clients.
     mcp_server = create_server(apply_input, item_json, text_draft, duplicates)
-    mcp_app = AgentBearerGate(mcp_server.streamable_http_app())
+    mcp_app = AgentCredentialGate(mcp_server.streamable_http_app())
     async with mcp_server.session_manager.run():
         yield {"mcp_app": mcp_app}
 
@@ -51,6 +51,7 @@ app.add_middleware(
     allow_headers=[
         "Content-Type",
         "Authorization",
+        "X-API-Key",
         "X-Client-Date",
         "X-Client-Timezone",
         "X-Client-Key",

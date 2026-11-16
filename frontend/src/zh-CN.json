@@ -531,6 +531,7 @@
   "Agents can read your reminders and notes and add new ones after confirmation. They cannot edit, complete, or delete existing items, or access account settings. Keep token access limited to trusted agents.": "智能体可以查看你的提醒和笔记，并在确认后添加新的提醒和笔记；不能编辑、完成或删除已有内容，也不能访问账号设置。请只向可信的智能体提供令牌。",
   "MCP endpoint": "MCP 服务地址",
   "Use Streamable HTTP with an Authorization: Bearer token header. OAuth-only clients are not supported.": "使用 Streamable HTTP，并在 Authorization: Bearer 请求头中提供令牌。不支持仅接受 OAuth 的客户端。",
+  "Your agent token is also your MCP API key. Use Streamable HTTP with X-API-Key or Authorization: Bearer. OAuth-only clients are not supported.": "智能体令牌也可作为 MCP API 密钥。使用 Streamable HTTP，通过 X-API-Key 或 Authorization: Bearer 请求头提供密钥。不支持仅接受 OAuth 的客户端。",
   "Agent name": "智能体名称",
   "Token lifetime": "令牌有效期",
   "7 days": "7 天",

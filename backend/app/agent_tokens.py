@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
+from starlette.datastructures import Headers
 
 from .accounts import invitation_base_url, throttle
 from .auth import require_user, token_hash
@@ -15,13 +16,35 @@ from .models import AgentToken, User, now
 router = APIRouter(prefix="/api/agent-tokens")
 
 
+def api_key_hash(value: str) -> str | None:
+    if not re.fullmatch(r"mewmo_mcp_[A-Za-z0-9_-]{64}", value):
+        return None
+    return token_hash(value)
+
+
 def bearer_hash(authorization: str) -> str | None:
     parts = authorization.split()
     if len(parts) != 2 or parts[0].lower() != "bearer":
         return None
-    if not re.fullmatch(r"mewmo_mcp_[A-Za-z0-9_-]{64}", parts[1]):
+    return api_key_hash(parts[1])
+
+
+def credential_hash(headers: Headers) -> str | None:
+    authorization = headers.getlist("authorization")
+    api_keys = headers.getlist("x-api-key")
+    # Never select an arbitrary first credential or fall back from an invalid one.
+    if len(authorization) > 1 or len(api_keys) > 1:
         return None
-    return token_hash(parts[1])
+    digests = []
+    if authorization:
+        digests.append(bearer_hash(authorization[0]))
+    if api_keys:
+        digests.append(api_key_hash(api_keys[0].strip()))
+    if not digests or any(digest is None for digest in digests):
+        return None
+    if len(digests) == 2 and not secrets.compare_digest(digests[0], digests[1]):
+        return None
+    return digests[0]
 
 
 def agent_token(db: Session, digest: str | None, lock: bool = False) -> AgentToken:

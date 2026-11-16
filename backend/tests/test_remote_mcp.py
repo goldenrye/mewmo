@@ -327,7 +327,8 @@ def test_past_urgent_create_does_not_send_late_alarms(client, remote, db):
     assert db.scalar(select(func.count()).select_from(Reminder)) == 0
 
 
-def test_official_sdk_streamable_http_client(remote):
+@pytest.mark.parametrize("header", ["Authorization", "X-API-Key"])
+def test_official_sdk_streamable_http_client(remote, header):
     async def scenario():
         async with app.router.lifespan_context(app) as state:
 
@@ -337,7 +338,7 @@ def test_official_sdk_streamable_http_client(remote):
 
             async with httpx.AsyncClient(
                 transport=httpx.ASGITransport(app=scoped_app),
-                headers={"Authorization": "Bearer " + remote["token"]},
+                headers={header: ("Bearer " if header == "Authorization" else "") + remote["token"]},
             ) as http:
                 async with streamable_http_client("http://localhost/api/mcp/", http_client=http) as (
                     read,
@@ -355,6 +356,31 @@ def test_official_sdk_streamable_http_client(remote):
                         assert not saved.isError and not again.isError
                         assert again.structuredContent["replayed"]
                         assert saved.structuredContent["item_id"] == again.structuredContent["item_id"]
+                        item_id = saved.structuredContent["item_id"]
+                        fetched = await sdk.call_tool("get_reminder", {"item_id": item_id})
+                        assert not fetched.isError and fetched.structuredContent["item"]["id"] == item_id
+                        listed = await sdk.call_tool("list_reminders", {"query": "Doctor"})
+                        assert not listed.isError
+                        assert [item["id"] for item in listed.structuredContent["items"]] == [item_id]
+
+                        note_preview = await sdk.call_tool(
+                            "preview_note", {"title": "Floor", "body": "Living room measurements"}
+                        )
+                        assert not note_preview.isError
+                        note_request = note_args(note_preview.structuredContent)
+                        note_saved = await sdk.call_tool("create_note", note_request)
+                        note_again = await sdk.call_tool("create_note", note_request)
+                        assert not note_saved.isError and not note_again.isError
+                        note_id = note_saved.structuredContent["note_id"]
+                        assert note_again.structuredContent["replayed"]
+                        assert note_again.structuredContent["note_id"] == note_id
+                        for name, arguments in [("list_notes", {}), ("search_notes", {"query": "living"})]:
+                            notes = await sdk.call_tool(name, arguments)
+                            assert not notes.isError
+                            assert [note["id"] for note in notes.structuredContent["items"]] == [note_id]
+                        fetched_note = await sdk.call_tool("get_note", {"note_id": note_id})
+                        assert not fetched_note.isError
+                        assert fetched_note.structuredContent["note"]["body"] == "Living room measurements"
 
     asyncio.run(scenario())
 
@@ -479,3 +505,108 @@ def test_reads_are_user_isolated(client, remote, db):
     assert tool(client, other, "get_reminder", {"item_id": item_id})["isError"]
     assert tool(client, other, "get_note", {"note_id": note_id})["isError"]
     assert preview_note(client, other)["duplicate_count"] == 0
+
+
+def key_rpc(client, headers, path="/api/mcp/"):
+    return client.post(
+        path,
+        headers=[("Host", "localhost"), ("Accept", "application/json, text/event-stream"), *headers],
+        json={"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}},
+    )
+
+
+def test_api_key_expiry_revocation_and_no_general_api_access(client, remote, db):
+    headers = [("X-API-Key", remote["token"])]
+    assert key_rpc(client, headers).status_code == 200
+    client.delete("/api/agent-tokens/" + remote["id"])
+    assert key_rpc(client, headers).status_code == 401
+    db.expire_all()
+    token = db.get(AgentToken, remote["id"])
+    token.revoked_at = None
+    token.expires_at = datetime.now(UTC) - timedelta(seconds=1)
+    db.commit()
+    assert key_rpc(client, headers).status_code == 401
+    token.expires_at = datetime.now(UTC) + timedelta(days=1)
+    db.commit()
+    client.cookies.clear()
+    assert key_rpc(client, headers).status_code == 200
+    for path in ["/api/items", "/api/notes", "/api/model-settings", "/api/agent-tokens"]:
+        assert client.get(path, headers=headers).status_code == 401
+
+
+def test_matching_credentials_accepted_and_cross_account_conflict_rejected(client, remote, db):
+    assert (
+        key_rpc(
+            client, [("Authorization", "Bearer " + remote["token"]), ("x-api-key", remote["token"])]
+        ).status_code
+        == 200
+    )
+    db.add(
+        User(
+            id="second",
+            username="second",
+            display_name="Second",
+            password_hash=password_hash("test-password-2"),
+        )
+    )
+    secret = "mewmo_mcp_" + "b" * 64
+    db.add(
+        AgentToken(
+            user_id="second",
+            name="Other",
+            token_hash=token_hash(secret),
+            expires_at=datetime.now(UTC) + timedelta(days=1),
+        )
+    )
+    db.commit()
+    assert key_rpc(client, [("X-API-Key", secret)]).status_code == 200
+    result = key_rpc(client, [("Authorization", "Bearer " + remote["token"]), ("X-API-Key", secret)])
+    assert result.status_code == 401
+    assert secret not in result.text and remote["token"] not in result.text
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        "bad-bearer",
+        "bad-key",
+        "empty-bearer",
+        "empty-key",
+        "duplicate-key",
+        "duplicate-bearer",
+        "prefixed-key",
+        "query-key",
+    ],
+)
+def test_api_key_never_falls_back_from_ambiguous_credentials(client, remote, case):
+    key = remote["token"]
+    headers = {
+        "bad-bearer": [("Authorization", "Basic invalid"), ("X-API-Key", key)],
+        "bad-key": [("Authorization", "Bearer " + key), ("X-API-Key", "invalid")],
+        "empty-bearer": [("Authorization", ""), ("X-API-Key", key)],
+        "empty-key": [("Authorization", "Bearer " + key), ("X-API-Key", "")],
+        "duplicate-key": [("X-API-Key", key), ("X-API-Key", key)],
+        "duplicate-bearer": [("Authorization", "Bearer " + key)] * 2,
+        "prefixed-key": [("X-API-Key", "Bearer " + key)],
+        "query-key": [],
+    }[case]
+    path = "/api/mcp/?api_key=" + key if case == "query-key" else "/api/mcp/"
+    assert key_rpc(client, headers, path).status_code == 401
+
+
+def test_browser_api_key_preflight_and_untrusted_origin(client, remote):
+    response = client.options(
+        "/api/mcp/",
+        headers={
+            "Host": "localhost",
+            "Origin": "http://localhost:5173",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "x-api-key,content-type,mcp-protocol-version",
+        },
+    )
+    assert response.status_code == 200
+    assert "x-api-key" in response.headers["access-control-allow-headers"].lower()
+    assert (
+        key_rpc(client, [("X-API-Key", remote["token"]), ("Origin", "https://evil.example")]).status_code
+        == 403
+    )

@@ -109,7 +109,7 @@ export function AgentAccess() {
         )}
         <p className="muted small">
           {t(
-            "Use Streamable HTTP with an Authorization: Bearer token header. OAuth-only clients are not supported.",
+            "Your agent token is also your MCP API key. Use Streamable HTTP with X-API-Key or Authorization: Bearer. OAuth-only clients are not supported.",
           )}
         </p>
         <form onSubmit={create}>

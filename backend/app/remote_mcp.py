@@ -25,7 +25,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from .accounts import throttle
-from .agent_tokens import agent_token, bearer_hash
+from .agent_tokens import agent_token, credential_hash
 from .config import settings
 from .database import engine
 from .models import AgentCreateRequest, AgentNoteRequest, Item, Note, User
@@ -90,7 +90,7 @@ async def mounted_mcp(scope, receive, send):
     await handler(scope, receive, send)
 
 
-class AgentBearerGate:
+class AgentCredentialGate:
     """No browser cookies or normal login sessions authenticate the MCP endpoint."""
 
     def __init__(self, app):
@@ -113,10 +113,12 @@ class AgentBearerGate:
                 scope, receive, send
             )
         try:
-            await run_in_threadpool(authenticate, bearer_hash(request.headers.get("authorization", "")))
+            await run_in_threadpool(authenticate, credential_hash(request.headers))
         except HTTPException:
             return await JSONResponse(
-                {"error": "Use a valid agent token from Mewmo Settings > Agent access."},
+                {
+                    "error": "Use a valid MCP API key (X-API-Key) or bearer token from Settings > Agent access."
+                },
                 status_code=401,
                 headers={"WWW-Authenticate": 'Bearer realm="mewmo-mcp"'},
             )(scope, receive, send)
@@ -154,7 +156,7 @@ def create_server(apply_input, item_json, text_draft, duplicates):
 
     def digest(ctx: MCPContext):
         request = ctx.request_context.request
-        return bearer_hash(request.headers.get("authorization", "")) if request else None
+        return credential_hash(request.headers) if request else None
 
     def possible_duplicates(db, body, user_id):
         matches = set(

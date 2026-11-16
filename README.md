@@ -168,7 +168,7 @@ Mewmo exposes an authenticated **Streamable HTTP** MCP endpoint at **`/api/mcp/`
 
 1. Deploy migrations **0008** and **0009** and the updated API/web client using the existing Compose upgrade procedure. The backend lockfile includes the official Python MCP SDK. Set `PUBLIC_WEB_URL` to your real HTTPS origin, including a non-default port, and keep it in `CORS_ORIGINS` for browser clients. Existing reverse-proxy rules already forward `/api/`, authorization headers, and streaming responses.
 2. Open **Settings > Agent access > Manage agent access**. Enter an agent name and choose a 7-, 30-, or 90-day lifetime, then **Create agent token**. Up to ten active tokens are allowed per account.
-3. Copy the endpoint and the token, which is shown only once. Configure your MCP client to use Streamable HTTP and `Authorization: Bearer <token>`. Do not put the token into a conversation, source control, or a URL query string.
+3. Copy the endpoint and the token, which is shown only once. **This token is also your MCP API key**; existing tokens work without replacement. Configure your MCP client to use Streamable HTTP with either `X-API-Key: <token>` or `Authorization: Bearer <token>`. Do not put the key into a conversation, source control, or a URL query string.
 4. Keep the agent client's write-tool approval enabled. Ask it to prepare a reminder, review the full date/time/timezone and urgency, then confirm creation.
 
 For clients using an `mcpServers` JSON configuration, a typical connection is:
@@ -179,14 +179,16 @@ For clients using an `mcpServers` JSON configuration, a typical connection is:
     "mewmo": {
       "url": "https://mewmo.rental-mgmt.us:9443/api/mcp/",
       "headers": {
-        "Authorization": "Bearer YOUR_PRIVATE_AGENT_TOKEN"
+        "X-API-Key": "YOUR_PRIVATE_AGENT_TOKEN"
       }
     }
   }
 }
 ```
 
-Client configuration formats vary; select **HTTP / Streamable HTTP**, not the legacy SSE transport. For Codex, the equivalent entry uses an environment variable so the configuration does not contain the secret:
+Send the raw key in `X-API-Key`, without a `Bearer` prefix. The existing `Authorization: Bearer ...` header remains supported. Prefer one authentication header; if both are sent, they must contain the same valid credential. Conflicting, malformed, or repeated credential headers are rejected rather than choosing an account or falling back. Keys in query parameters or request bodies are not accepted.
+
+Client configuration formats vary; select **HTTP / Streamable HTTP**, not the legacy SSE transport. For Codex, the equivalent bearer-auth entry uses an environment variable so the configuration does not contain the secret:
 
 ```toml
 [mcp_servers.mewmo]
@@ -194,7 +196,7 @@ url = "https://mewmo.rental-mgmt.us:9443/api/mcp/"
 bearer_token_env_var = "MEWMO_MCP_TOKEN"
 ```
 
-Provide `MEWMO_MCP_TOKEN` through your client's private environment/secret settings, then restart or reconnect it. This release uses manually provisioned bearer tokens, **not OAuth**: OAuth-only clients cannot connect. Normal browser cookies, login-session tokens, and AI provider keys are not accepted as MCP credentials.
+Provide `MEWMO_MCP_TOKEN` through your client's private environment/secret settings, then restart or reconnect it. This release uses manually provisioned API keys/bearer tokens, **not OAuth**: OAuth-only clients cannot connect. Normal browser cookies, login-session tokens, and AI provider keys are not accepted as MCP credentials. Both headers use the same expiry, revocation, account isolation, and reminder-and-note permissions. API-key authentication itself needs no migration beyond **0008**; the merged note-creation tools require **0009** as well.
 
 ### Tools and Confirmation
 
