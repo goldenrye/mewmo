@@ -167,9 +167,11 @@ Mewmo exposes an authenticated **Streamable HTTP** MCP endpoint at **`/api/mcp/`
 ### Connect an Agent
 
 1. Deploy migrations **0008** and **0009** and the updated API/web client using the existing Compose upgrade procedure. The backend lockfile includes the official Python MCP SDK. Set `PUBLIC_WEB_URL` to your real HTTPS origin, including a non-default port, and keep it in `CORS_ORIGINS` for browser clients. Existing reverse-proxy rules already forward `/api/`, authorization headers, and streaming responses.
-2. Open **Settings > Agent access > Manage agent access**. Enter an agent name and choose a 7-, 30-, or 90-day lifetime, then **Create agent token**. Up to ten active tokens are allowed per account.
+2. Open **Settings > MCP API keys > Manage API keys** (Chinese: **设置 > MCP API 密钥 > 管理 API 密钥**). Enter an agent name and choose a 7-, 30-, or 90-day lifetime, then **Create API key**. Up to ten active keys are allowed per account. Earlier builds label this card **Agent access** and the button **Create agent token**; these are the same credentials.
 3. Copy the endpoint and the token, which is shown only once. **This token is also your MCP API key**; existing tokens work without replacement. Configure your MCP client to use Streamable HTTP with either `X-API-Key: <token>` or `Authorization: Bearer <token>`. Do not put the key into a conversation, source control, or a URL query string.
 4. Keep the agent client's write-tool approval enabled. Ask it to prepare a reminder, review the full date/time/timezone and urgency, then confirm creation.
+
+The iPhone app bundles its Settings screens. If the entire MCP/Agent access card is missing, run `npm run ios:sync` in `frontend`, then build and install the updated app through Xcode or distribute an updated TestFlight/App Store build. Syncing files or redeploying the backend alone does not update an already-installed iPhone app. The MCP card appears above AI settings for all signed-in users, not just administrators; an outdated backend can prevent key creation but does not hide the card.
 
 For clients using an `mcpServers` JSON configuration, a typical connection is:
 

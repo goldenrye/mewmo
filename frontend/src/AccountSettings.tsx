@@ -108,8 +108,8 @@ export function AccountSettings({
           </form>
         </details>
       </section>
-      <AISettings onChange={onModelChange} />
       <AgentAccess key={account.user.id} />
+      <AISettings onChange={onModelChange} />
       {account.user.is_admin && <Invitations />}
     </div>
   );

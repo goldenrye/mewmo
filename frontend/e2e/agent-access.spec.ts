@@ -27,12 +27,18 @@ for (const header of ["Authorization", "X-API-Key"]) {
         .click();
       const section = page.locator("section").filter({
         has: page.getByRole("heading", {
-          name: zh ? "智能体访问" : "Agent access",
+          name: zh ? "MCP API 密钥" : "MCP API keys",
           exact: true,
         }),
       });
+      await expect(
+        page
+          .locator(".account-settings > section")
+          .nth(1)
+          .getByRole("heading", { level: 2 }),
+      ).toHaveText(zh ? "MCP API 密钥" : "MCP API keys");
       await section
-        .getByText(zh ? "管理智能体访问" : "Manage agent access", {
+        .getByText(zh ? "管理 API 密钥" : "Manage API keys", {
           exact: true,
         })
         .click();
@@ -49,7 +55,7 @@ for (const header of ["Authorization", "X-API-Key"]) {
       );
       await section
         .getByRole("button", {
-          name: zh ? "创建智能体令牌" : "Create agent token",
+          name: zh ? "创建 API 密钥" : "Create API key",
           exact: true,
         })
         .click();
@@ -66,7 +72,7 @@ for (const header of ["Authorization", "X-API-Key"]) {
         });
       try {
         const secret = section.getByLabel(
-          zh ? "智能体令牌（仅显示一次）" : "Agent token (shown once)",
+          zh ? "API 密钥（仅显示一次）" : "API key (shown once)",
           { exact: true },
         );
         await expect(secret).toHaveValue(issued.token);
@@ -121,12 +127,12 @@ for (const header of ["Authorization", "X-API-Key"]) {
         expect(replay.result.structuredContent.replayed).toBe(true);
         expect(replay.result.structuredContent.item_id).toBe(itemId);
         await section
-          .getByText(zh ? "管理智能体访问" : "Manage agent access", {
+          .getByText(zh ? "管理 API 密钥" : "Manage API keys", {
             exact: true,
           })
           .click();
         await section
-          .getByText(zh ? "管理智能体访问" : "Manage agent access", {
+          .getByText(zh ? "管理 API 密钥" : "Manage API keys", {
             exact: true,
           })
           .click();

@@ -74,7 +74,7 @@ export function AgentAccess() {
 
   return (
     <section className="settings-card account-card">
-      <h2>{t("Agent access")}</h2>
+      <h2>{t("MCP API keys")}</h2>
       <p className="muted">
         {t(
           "Let trusted agents read and add reminders and notes through remote MCP.",
@@ -91,7 +91,7 @@ export function AgentAccess() {
           }
         }}
       >
-        <summary>{t("Manage agent access")}</summary>
+        <summary>{t("Manage API keys")}</summary>
         <p className="muted small">
           {t(
             "Agents can read your reminders and notes and add new ones after confirmation. They cannot edit, complete, or delete existing items, or access account settings. Keep token access limited to trusted agents.",
@@ -109,7 +109,7 @@ export function AgentAccess() {
         )}
         <p className="muted small">
           {t(
-            "Your agent token is also your MCP API key. Use Streamable HTTP with X-API-Key or Authorization: Bearer. OAuth-only clients are not supported.",
+            "Use this MCP API key with X-API-Key or Authorization: Bearer over Streamable HTTP. OAuth-only clients are not supported.",
           )}
         </p>
         <form onSubmit={create}>
@@ -123,7 +123,7 @@ export function AgentAccess() {
             />
           </label>
           <label>
-            {t("Token lifetime")}
+            {t("Key lifetime")}
             <select
               value={days}
               onChange={(event) => setDays(event.target.value)}
@@ -134,13 +134,13 @@ export function AgentAccess() {
             </select>
           </label>
           <button className="primary" disabled={busy || !access}>
-            {busy ? t("Please wait...") : t("Create agent token")}
+            {busy ? t("Please wait...") : t("Create API key")}
           </button>
         </form>
         {issued && (
           <div className="invite-result">
             <label>
-              {t("Agent token (shown once)")}
+              {t("API key (shown once)")}
               <input
                 readOnly
                 autoComplete="off"
@@ -165,13 +165,13 @@ export function AgentAccess() {
                     if (live.current)
                       setError(
                         t(
-                          "Clipboard unavailable. Select the token to copy it.",
+                          "Clipboard unavailable. Select the API key to copy it.",
                         ),
                       );
                   });
               }}
             >
-              {copied ? t("Copied") : t("Copy agent token")}
+              {copied ? t("Copied") : t("Copy API key")}
             </button>
           </div>
         )}
@@ -188,7 +188,7 @@ export function AgentAccess() {
             void refresh();
           }}
         >
-          {t("Refresh agent tokens")}
+          {t("Refresh API keys")}
         </button>
         {access?.tokens.map((token) => (
           <div className="delivery-row invitation-row" key={token.id}>

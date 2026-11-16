@@ -117,7 +117,7 @@ class AgentCredentialGate:
         except HTTPException:
             return await JSONResponse(
                 {
-                    "error": "Use a valid MCP API key (X-API-Key) or bearer token from Settings > Agent access."
+                    "error": "Use a valid MCP API key (X-API-Key) or bearer token from Settings > MCP API keys."
                 },
                 status_code=401,
                 headers={"WWW-Authenticate": 'Bearer realm="mewmo-mcp"'},
