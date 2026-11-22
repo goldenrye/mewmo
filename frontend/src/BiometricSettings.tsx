@@ -1,55 +1,35 @@
 import { messageText, t } from "./i18n";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
-  biometricStatus,
+  biometricNeedsRenewal,
   clearBiometrics,
   enableBiometrics,
-  supportsBiometrics,
-  type BiometricStatus,
 } from "./biometrics";
+import { useBiometricStatus } from "./useBiometricStatus";
 
 export function BiometricSettings() {
-  const [status, setStatus] = useState<BiometricStatus | null>(null);
+  const {
+    supported,
+    status,
+    checking,
+    error: statusError,
+    refresh,
+  } = useBiometricStatus();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
-  useEffect(() => {
-    let live = true;
-    if (supportsBiometrics()) {
-      void biometricStatus()
-        .then((value) => {
-          if (live) setStatus(value);
-        })
-        .catch(() => {
-          if (live)
-            setError(
-              t(
-                "Biometric settings are unavailable. Reopen the app to try again.",
-              ),
-            );
-        });
-    }
-    return () => {
-      live = false;
-    };
-  }, []);
-  if (!supportsBiometrics()) return null;
-  if (!status)
-    return error ? (
-      <p className="error" role="alert">
-        {messageText(error)}
-      </p>
-    ) : null;
-  async function toggle() {
+  if (!supported) return null;
+  const needsRenewal = biometricNeedsRenewal(status);
+  async function toggle(disable: boolean) {
     if (!status || busy) return;
     setBusy(true);
     setError("");
     setMessage("");
     try {
-      if (status.enabled) await clearBiometrics();
+      if (disable) await clearBiometrics();
       else await enableBiometrics();
-      const next = await biometricStatus();
-      setStatus(next);
+      const next = await refresh();
+      if (!next) return;
       setMessage(
         next.enabled
           ? t("{method} is ready for your next app launch.", {
@@ -66,32 +46,82 @@ export function BiometricSettings() {
   return (
     <details className="disclosure">
       <summary>
-        {t("{method} sign-in", { method: t(status.label) })} ·{" "}
-        {status.enabled ? t("On") : t("Off")}
+        {t("{method} sign-in", { method: t(status?.label || "Face ID") })}
+        {status && <> · {status.enabled ? t("On") : t("Off")}</>}
+        {needsRenewal && <> · {t("Renewal needed")}</>}
       </summary>
       <p className="muted small">
         {t(
           "Unlock your saved session on this iPhone. Your password is still needed after 7 days or if you sign out.",
         )}
       </p>
-      {!status.available && (
+      {checking && (
+        <p role="status" className="muted small">
+          {t("Checking biometric status...")}
+        </p>
+      )}
+      {statusError && (
+        <p role="alert" className="error">
+          {t(statusError)}
+        </p>
+      )}
+      {(statusError || needsRenewal) && (
+        <button
+          className="text-button"
+          disabled={busy || checking}
+          onClick={() => void refresh()}
+        >
+          {t("Retry status check")}
+        </button>
+      )}
+      {needsRenewal && (
+        <p className="muted small">
+          {t(
+            "{method} is still enabled, but its saved sign-in needs renewal.",
+            { method: t(status!.label) },
+          )}
+        </p>
+      )}
+      {status && !status.available && (
         <p className="muted small">
           {t("Set up or allow {method} in iPhone Settings to use it.", {
             method: t(status.label),
           })}
         </p>
       )}
-      <button
-        className="secondary"
-        disabled={busy || (!status.available && !status.enabled)}
-        onClick={() => void toggle()}
-      >
-        {busy
-          ? t("Please wait...")
-          : t(status.enabled ? "Disable {method}" : "Enable {method}", {
-              method: t(status.label),
-            })}
-      </button>
+      {status && (
+        <button
+          className="secondary"
+          disabled={
+            busy ||
+            checking ||
+            (!status.available && (!status.enabled || needsRenewal))
+          }
+          onClick={() => void toggle(status.enabled && !needsRenewal)}
+        >
+          {busy
+            ? t("Please wait...")
+            : t(
+                needsRenewal
+                  ? "Renew {method} sign-in"
+                  : status.enabled
+                    ? "Disable {method}"
+                    : "Enable {method}",
+                {
+                  method: t(status.label),
+                },
+              )}
+        </button>
+      )}
+      {needsRenewal && (
+        <button
+          className="text-button"
+          disabled={busy || checking}
+          onClick={() => void toggle(true)}
+        >
+          {t("Disable {method}", { method: t(status!.label) })}
+        </button>
+      )}
       {error && (
         <p className="error" role="alert">
           {messageText(error)}

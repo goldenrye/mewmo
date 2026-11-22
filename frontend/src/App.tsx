@@ -44,14 +44,16 @@ import {
   UrgentAlarmSettings,
 } from "./UrgentAlarms";
 import {
-  biometricStatus,
+  biometricNeedsRenewal,
+  biometricCredentialNotice,
   clearBiometrics,
+  invalidateBiometrics,
   signInWithBiometrics,
   BiometricPasswordRequiredError,
   BiometricConnectionError,
   type BiometricLoginStage,
-  type BiometricStatus,
 } from "./biometrics";
+import { useBiometricStatus } from "./useBiometricStatus";
 import { Editor } from "./Editor";
 import { AccountSettings } from "./AccountSettings";
 import { VoiceInput } from "./VoiceInput";
@@ -113,7 +115,14 @@ function Login({
   const [confirmation, setConfirmation] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [biometric, setBiometric] = useState<BiometricStatus | null>(null);
+  const {
+    supported: biometricSupported,
+    status: biometric,
+    setStatus: setBiometric,
+    checking: checkingBiometric,
+    error: biometricStatusError,
+    refresh: refreshBiometric,
+  } = useBiometricStatus();
   const [biometricRetry, setBiometricRetry] = useState(false);
   const [biometricNotice, setBiometricNotice] = useState<{
     title: string;
@@ -122,17 +131,14 @@ function Login({
   } | null>(null);
   const [biometricStage, setBiometricStage] =
     useState<BiometricLoginStage | null>(null);
-  useEffect(() => {
-    let live = true;
-    void biometricStatus()
-      .then((value) => {
-        if (live) setBiometric(value);
-      })
-      .catch(() => {});
-    return () => {
-      live = false;
-    };
-  }, []);
+  const needsRenewal = biometricNeedsRenewal(biometric);
+  const notice =
+    biometricNotice ||
+    (needsRenewal
+      ? biometricCredentialNotice(
+          biometric!.sessionState as "missing" | "invalid" | "rejected",
+        )
+      : null);
   async function biometricLogin() {
     if (busy) return;
     setBusy(true);
@@ -158,7 +164,9 @@ function Login({
       setBiometricRetry(!passwordRequired);
       // Transient failures must not remove the user's manual retry option.
       if (passwordRequired)
-        setBiometric((value) => value && { ...value, enabled: false });
+        setBiometric(
+          (value) => value && { ...value, sessionState: error.reason },
+        );
     } finally {
       setBiometricStage(null);
       setBusy(false);
@@ -192,8 +200,10 @@ function Login({
           }),
         },
       );
-      // Password/account switching never inherits another account's saved session.
-      await clearBiometrics();
+      if (currentSession().version !== version)
+        throw new Error(t("Account changed. Please try again."));
+      // Delete the old credential; only a known same-account preference survives.
+      await invalidateBiometrics("missing", result.user.id);
       if (currentSession().version !== version)
         throw new Error(t("Account changed. Please try again."));
       onLogin(result);
@@ -220,18 +230,63 @@ function Login({
           {register && (
             <p className="muted">{t("An invitation is required to join.")}</p>
           )}
-          {!register && biometric?.enabled && (
-            <button
-              type="button"
-              className="secondary"
-              disabled={busy}
-              onClick={() => void biometricLogin()}
-            >
-              <ScanFace size={20} />
-              {t(biometricRetry ? "Retry {method}" : "Sign in with {method}", {
-                method: t(biometric.label),
-              })}
-            </button>
+          {!register && biometricSupported && (
+            <>
+              <button
+                type="button"
+                className="secondary"
+                disabled={
+                  busy ||
+                  checkingBiometric ||
+                  !biometric?.enabled ||
+                  needsRenewal ||
+                  notice?.passwordRequired
+                }
+                onClick={() => void biometricLogin()}
+              >
+                <ScanFace size={20} />
+                {t(
+                  biometricRetry ? "Retry {method}" : "Sign in with {method}",
+                  {
+                    method: t(biometric?.label || "Face ID"),
+                  },
+                )}
+              </button>
+              {checkingBiometric && (
+                <p role="status" className="muted small">
+                  {t("Checking biometric status...")}
+                </p>
+              )}
+              {biometricStatusError && (
+                <p role="alert" className="error">
+                  {t(biometricStatusError)}
+                </p>
+              )}
+              {!checkingBiometric &&
+                !biometricStatusError &&
+                biometric &&
+                !biometric.enabled && (
+                  <p className="muted small">
+                    {t(
+                      "{method} sign-in is off. Sign in with your password and enable it in Settings.",
+                      { method: t(biometric.label) },
+                    )}
+                  </p>
+                )}
+              {(biometricStatusError || needsRenewal) && (
+                <button
+                  type="button"
+                  className="text-button"
+                  disabled={busy || checkingBiometric}
+                  onClick={() => {
+                    setBiometricNotice(null);
+                    void refreshBiometric();
+                  }}
+                >
+                  {t("Retry status check")}
+                </button>
+              )}
+            </>
           )}
           {biometricStage && (
             <p role="status" className="muted small">
@@ -242,18 +297,15 @@ function Login({
               )}
             </p>
           )}
-          {!register && biometricNotice && (
+          {!register && notice && (
             <div className="error biometric-notice" role="alert">
-              <strong>{t(biometricNotice.title)}</strong>
-              <p>{messageText(biometricNotice.message)}</p>
+              <strong>{t(notice.title)}</strong>
+              <p>{messageText(notice.message)}</p>
               <p>
-                {biometricNotice.passwordRequired
-                  ? t(
-                      "After password sign-in, enable {method} again in Settings.",
-                      {
-                        method: t(biometric?.label || "Face ID"),
-                      },
-                    )
+                {notice.passwordRequired
+                  ? t("After password sign-in, renew {method} in Settings.", {
+                      method: t(biometric?.label || "Face ID"),
+                    })
                   : t(
                       "Your saved sign-in is kept. Retry when ready, or choose password sign-in below.",
                     )}
@@ -588,11 +640,15 @@ export default function App() {
       /* Storage may be disabled. */
     }
   }
-  const clearAccount = useCallback(() => {
+  const clearAccount = useCallback((reason?: "rejected") => {
+    const hadSession = !!currentSession().token || !!currentSession().userId;
     setToken(null);
     void bindAlarmAccount(null).catch(() => {});
     setAccount(null);
-    void clearBiometrics().catch(() => {});
+    if (!reason || hadSession)
+      void (reason ? invalidateBiometrics(reason) : clearBiometrics()).catch(
+        () => {},
+      );
     void clearDisplayedNotifications();
   }, []);
   useEffect(() => {
@@ -626,12 +682,13 @@ export default function App() {
       setInvitation(token);
       window.history.replaceState({}, "", location.pathname + location.search);
     };
-    window.addEventListener("mewmo:unauthorized", clearAccount);
+    const unauthorized = () => clearAccount("rejected");
+    window.addEventListener("mewmo:unauthorized", unauthorized);
     window.addEventListener("storage", storage);
     window.addEventListener("hashchange", readInvitation);
     return () => {
       live = false;
-      window.removeEventListener("mewmo:unauthorized", clearAccount);
+      window.removeEventListener("mewmo:unauthorized", unauthorized);
       window.removeEventListener("storage", storage);
       window.removeEventListener("hashchange", readInvitation);
     };

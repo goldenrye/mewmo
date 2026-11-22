@@ -6,6 +6,7 @@ async function mockPrompt(
   cancelled: boolean,
   timeout = false,
   recovery: "none" | "transient" | "expired" | "missing" | "invalid" = "none",
+  initialStatus: "ready" | "error" | "renewal" = "ready",
 ) {
   await page.route("**/src/biometrics.ts*", (route) =>
     route.fulfill({
@@ -19,20 +20,40 @@ async function mockPrompt(
         let failedVerification = false;
         let attempts = 0;
         let statusCalls = 0;
+        let enabled = true;
+        let sessionState = sessionStorage.getItem("test:biometric-state") || ${JSON.stringify(initialStatus === "renewal" ? "rejected" : "unchecked")};
+        export const biometricNeedsRenewal = value => !!value?.enabled && !!value.sessionState && value.sessionState !== "unchecked";
+        export const biometricCredentialNotice = reason => ({
+          title: reason === "missing" ? "Saved sign-in missing" : reason === "invalid" ? "Saved sign-in invalid" : "Saved session rejected",
+          message: reason === "missing" ? "No saved sign-in was found on this iPhone. Sign in with your password."
+            : reason === "invalid" ? "The saved sign-in on this iPhone cannot be read or is invalid. Sign in with your password."
+            : "The server rejected your saved session. It may be expired or revoked. Sign in with your password.",
+          passwordRequired: true,
+        });
         export const supportsBiometrics = () => true;
         export const biometricStatus = async () => {
           document.documentElement.dataset.biometricStatusCalls = String(++statusCalls);
+          if (${initialStatus === "error"} && !document.documentElement.dataset.statusRecovered)
+            throw new Error("Native status temporarily unavailable");
           if (failedVerification && ${recovery === "transient"})
             return { available: false, enabled: false, label: "Face ID" };
           if (failedVerification) return new Promise(() => {});
-          return { available: true, enabled: true, label: "Face ID" };
+          return { available: true, enabled, label: "Face ID", sessionState };
         };
-        export const clearBiometrics = async () => {};
-        export const enableBiometrics = async () => {};
+        export const clearBiometrics = async () => { enabled = false; sessionState = "unchecked"; };
+        export const invalidateBiometrics = async reason => {
+          sessionState = reason;
+          sessionStorage.setItem("test:biometric-state", reason);
+        };
+        export const enableBiometrics = async () => {
+          enabled = true; sessionState = "unchecked";
+          sessionStorage.setItem("test:biometric-state", sessionState);
+        };
         export async function signInWithBiometrics(onProgress) {
           document.documentElement.dataset.biometricAttempts = String(++attempts);
           if (${cancelled}) throw new Error("Sign-in cancelled. Try again or use your password.");
           if (${["expired", "missing", "invalid"].includes(recovery)}) {
+            await invalidateBiometrics(${JSON.stringify(recovery === "expired" ? "rejected" : recovery)});
             throw new BiometricPasswordRequiredError(${JSON.stringify(
               recovery === "expired"
                 ? "The server rejected your saved session. It may be expired or revoked. Sign in with your password."
@@ -109,6 +130,178 @@ test("real browser does not offer unsupported Face ID sign-in", async ({
 });
 
 for (const language of ["en", "zh-CN"]) {
+  test(`${language} initial status failure stays visible and can be retried`, async ({
+    page,
+  }) => {
+    const zh = language === "zh-CN";
+    await page.addInitScript(
+      (value) => localStorage.setItem("mewmo:language", value),
+      language,
+    );
+    await mockPrompt(page, false, false, "none", "error");
+    const face = page.getByRole("button", {
+      name: zh ? "使用面容 ID登录" : "Sign in with Face ID",
+      exact: true,
+    });
+    await expect(face).toBeVisible();
+    await expect(face).toBeDisabled();
+    await expect(page.getByRole("alert")).toContainText(
+      zh ? "无法检查生物识别状态" : "Could not check biometric status",
+    );
+    await expect(
+      page.getByRole("button", { name: zh ? "登录" : "Sign in", exact: true }),
+    ).toBeEnabled();
+    await page.evaluate(() => {
+      document.documentElement.dataset.statusRecovered = "yes";
+    });
+    await page
+      .getByRole("button", { name: zh ? "重试状态检查" : "Retry status check" })
+      .click();
+    await expect(face).toBeEnabled();
+    await expect(page.getByRole("alert")).toHaveCount(0);
+    await face.click();
+    await expect(
+      page.getByRole("heading", {
+        name: zh ? "首页" : "Overview",
+        exact: true,
+      }),
+    ).toBeVisible();
+    await page.evaluate(() => {
+      delete document.documentElement.dataset.statusRecovered;
+    });
+    await page
+      .getByRole("button", { name: zh ? "设置" : "Settings", exact: true })
+      .filter({ visible: true })
+      .click();
+    const settings = page.locator("details").filter({
+      has: page
+        .locator("summary")
+        .filter({ hasText: zh ? "面容 ID登录" : "Face ID sign-in" }),
+    });
+    await settings.locator("summary").click();
+    await expect(settings.getByRole("alert")).toContainText(
+      zh ? "无法检查生物识别状态" : "Could not check biometric status",
+    );
+    await page.evaluate(() => {
+      document.documentElement.dataset.statusRecovered = "yes";
+    });
+    await settings
+      .getByRole("button", { name: zh ? "重试状态检查" : "Retry status check" })
+      .click();
+    await expect(settings.getByRole("alert")).toHaveCount(0);
+    await expect(
+      settings.getByRole("button", {
+        name: zh ? "关闭面容 ID" : "Disable Face ID",
+        exact: true,
+      }),
+    ).toBeEnabled();
+  });
+
+  test(`${language} background session rejection keeps Face ID with a renewal explanation`, async ({
+    page,
+  }) => {
+    const zh = language === "zh-CN";
+    await page.addInitScript(
+      (value) => localStorage.setItem("mewmo:language", value),
+      language,
+    );
+    await mockPrompt(page, false);
+    await page
+      .getByRole("button", {
+        name: zh ? "使用面容 ID登录" : "Sign in with Face ID",
+        exact: true,
+      })
+      .click();
+    await expect(
+      page.getByRole("heading", {
+        name: zh ? "首页" : "Overview",
+        exact: true,
+      }),
+    ).toBeVisible();
+    await page.route("**/api/items*", (route) =>
+      route.fulfill({
+        status: 401,
+        contentType: "application/json",
+        body: '{"detail":"Please sign in"}',
+      }),
+    );
+    await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+    await expect(
+      page.getByRole("heading", {
+        name: zh ? "欢迎使用 Mewmo" : "Welcome to Mewmo",
+      }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", {
+        name: zh ? "使用面容 ID登录" : "Sign in with Face ID",
+        exact: true,
+      }),
+    ).toBeDisabled();
+    await expect(page.getByRole("alert")).toContainText(
+      zh ? "已保存的会话被服务器拒绝" : "Saved session rejected",
+    );
+  });
+
+  test(`${language} renewal state survives reload and is renewed explicitly in Settings`, async ({
+    page,
+  }) => {
+    const zh = language === "zh-CN";
+    await page.addInitScript(
+      (value) => localStorage.setItem("mewmo:language", value),
+      language,
+    );
+    await mockPrompt(page, false, false, "none", "renewal");
+    const face = page.getByRole("button", {
+      name: zh ? "使用面容 ID登录" : "Sign in with Face ID",
+      exact: true,
+    });
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await expect(face).toBeVisible();
+      await expect(face).toBeDisabled();
+      await expect(page.getByRole("alert")).toContainText(
+        zh ? "可能已过期或被撤销" : "may be expired or revoked",
+      );
+      if (!attempt) await page.reload();
+    }
+    await page
+      .getByLabel(zh ? "用户名" : "Username", { exact: true })
+      .fill("admin");
+    await page
+      .getByLabel(zh ? "密码" : "Your password", { exact: true })
+      .fill("mewmo-local-test");
+    await page
+      .getByRole("button", { name: zh ? "登录" : "Sign in", exact: true })
+      .click();
+    await page
+      .getByRole("button", { name: zh ? "设置" : "Settings", exact: true })
+      .filter({ visible: true })
+      .click();
+    const disclosure = page.locator("details").filter({
+      has: page
+        .locator("summary")
+        .filter({ hasText: zh ? "面容 ID登录" : "Face ID sign-in" }),
+    });
+    await expect(disclosure.locator("summary")).toContainText(
+      zh ? "需要更新登录凭据" : "Renewal needed",
+    );
+    await disclosure.locator("summary").click();
+    await disclosure
+      .getByRole("button", {
+        name: zh ? "更新面容 ID登录凭据" : "Renew Face ID sign-in",
+        exact: true,
+      })
+      .click();
+    await expect(disclosure.locator("summary")).not.toContainText(
+      zh ? "需要更新登录凭据" : "Renewal needed",
+    );
+    await expect(
+      disclosure.getByRole("button", {
+        name: zh ? "关闭面容 ID" : "Disable Face ID",
+        exact: true,
+      }),
+    ).toBeEnabled();
+  });
+
   test(`${language} verification feedback and password fallback survive a stalled status refresh`, async ({
     page,
   }) => {
@@ -268,8 +461,8 @@ for (const language of ["en", "zh-CN"]) {
       await expect(alert.locator("strong")).toHaveText(titles[reason]);
       await expect(alert).toContainText(
         zh
-          ? "使用密码登录后，请在设置中重新启用面容 ID。"
-          : "After password sign-in, enable Face ID again in Settings.",
+          ? "使用密码登录后，请在设置中更新面容 ID登录凭据。"
+          : "After password sign-in, renew Face ID in Settings.",
       );
       if (reason === "expired")
         await expect(alert).toContainText(
@@ -286,7 +479,8 @@ for (const language of ["en", "zh-CN"]) {
       expect(
         await page.evaluate(() => document.documentElement.scrollWidth),
       ).toBeLessThanOrEqual(320);
-      await expect(page.locator(".login-form .secondary")).toHaveCount(0);
+      await expect(page.locator(".login-form .secondary")).toBeVisible();
+      await expect(page.locator(".login-form .secondary")).toBeDisabled();
       await expect(
         page.getByRole("button", {
           name: zh ? "登录" : "Sign in",

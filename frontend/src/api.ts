@@ -54,8 +54,9 @@ function clientKey() {
 
 export async function api<T>(
   path: string,
-  options: RequestInit = {},
+  options: RequestInit & { notifyUnauthorized?: boolean } = {},
 ): Promise<T> {
+  const { notifyUnauthorized = true, ...requestOptions } = options;
   const version = sessionVersion;
   if (Capacitor.isNativePlatform() && !apiBase.startsWith("https://")) {
     throw new Error(
@@ -73,7 +74,7 @@ export async function api<T>(
     headers.set("Content-Type", "application/json");
   if (nativeToken) headers.set("Authorization", `Bearer ${nativeToken}`);
   const response = await fetch(`${apiBase}${path}`, {
-    ...options,
+    ...requestOptions,
     headers,
     // Native sign-in must not be silently restored by an old WebView cookie.
     credentials: Capacitor.isNativePlatform() ? "omit" : "include",
@@ -81,11 +82,9 @@ export async function api<T>(
   if (version !== sessionVersion)
     throw new Error("Account changed. Request discarded.");
   if (!response.ok) {
-    const body = await response
-      .json()
-      .catch(() => ({
-        detail: t("Request failed ({status})", { status: response.status }),
-      }));
+    const body = await response.json().catch(() => ({
+      detail: t("Request failed ({status})", { status: response.status }),
+    }));
     const detail = Array.isArray(body.detail)
       ? body.detail
           .map((e: { msg: string; loc?: (string | number)[] }) => {
@@ -105,6 +104,7 @@ export async function api<T>(
       throw new Error("Account changed. Request discarded.");
     if (
       response.status === 401 &&
+      notifyUnauthorized &&
       !["/auth/login", "/auth/register"].includes(path)
     )
       window.dispatchEvent(new Event("mewmo:unauthorized"));

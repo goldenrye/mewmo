@@ -7,6 +7,7 @@ export type BiometricStatus = {
   available: boolean;
   enabled: boolean;
   label: "Face ID" | "Touch ID";
+  sessionState?: "unchecked" | "missing" | "invalid" | "rejected";
 };
 export type BiometricLoginStage = "unlocking" | "verifying";
 
@@ -36,7 +37,12 @@ interface BiometricBridge {
     server: string;
     language: string;
   }): Promise<{ token: string; userId: string }>;
-  clear(options: { server: string }): Promise<void>;
+  clear(options: {
+    server: string;
+    preservePreference?: boolean;
+    reason?: "missing" | "invalid" | "rejected";
+    userId?: string;
+  }): Promise<void>;
 }
 
 const bridge = registerPlugin<BiometricBridge>("MewmoBiometrics");
@@ -63,8 +69,70 @@ function serialize<T>(operation: () => Promise<T>): Promise<T> {
 
 export async function biometricStatus(): Promise<BiometricStatus> {
   if (!supportsBiometrics()) return unsupported;
-  await mutations.catch(() => {});
-  return bridge.status({ server: apiBase });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      mutations.catch(() => {}).then(() => bridge.status({ server: apiBase })),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () =>
+            reject(
+              new Error(
+                "Could not check biometric status. Retry the check or use your password.",
+              ),
+            ),
+          5000,
+        );
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export function biometricNeedsRenewal(status: BiometricStatus | null): boolean {
+  return (
+    !!status?.enabled &&
+    !!status.sessionState &&
+    status.sessionState !== "unchecked"
+  );
+}
+
+export function biometricCredentialNotice(
+  reason: "missing" | "invalid" | "rejected",
+) {
+  return {
+    title:
+      reason === "missing"
+        ? "Saved sign-in missing"
+        : reason === "invalid"
+          ? "Saved sign-in invalid"
+          : "Saved session rejected",
+    message:
+      reason === "missing"
+        ? "No saved sign-in was found on this iPhone. Sign in with your password."
+        : reason === "invalid"
+          ? "The saved sign-in on this iPhone cannot be read or is invalid. Sign in with your password."
+          : "The server rejected your saved session. It may be expired or revoked. Sign in with your password.",
+    passwordRequired: true,
+  };
+}
+
+export async function invalidateBiometrics(
+  reason: "missing" | "invalid" | "rejected",
+  userId?: string,
+): Promise<void> {
+  if (!supportsBiometrics()) return;
+  const version = currentSession().version;
+  return serialize(() => {
+    if (currentSession().version !== version) return Promise.resolve();
+    return bridge.clear({
+      server: apiBase,
+      preservePreference: true,
+      reason,
+      ...(userId ? { userId } : {}),
+    });
+  });
 }
 
 export async function clearBiometrics(): Promise<void> {
@@ -110,22 +178,28 @@ export async function signInWithBiometrics(
     const code = (error as { code?: string } | null)?.code;
     if (currentSession().version !== version)
       throw new Error("Account changed. Sign-in cancelled.");
-    if (code === "MISSING_SESSION" || code === "INVALID_SESSION")
+    if (code === "MISSING_SESSION" || code === "INVALID_SESSION") {
+      await invalidateBiometrics(
+        code === "MISSING_SESSION" ? "missing" : "invalid",
+      );
       throw new BiometricPasswordRequiredError(
         code === "MISSING_SESSION"
           ? "No saved sign-in was found on this iPhone. Sign in with your password."
           : "The saved sign-in on this iPhone cannot be read or is invalid. Sign in with your password.",
         code === "MISSING_SESSION" ? "missing" : "invalid",
       );
+    }
     throw error;
   }
   if (currentSession().version !== version)
     throw new Error("Account changed. Sign-in cancelled.");
-  if (!saved.token || !saved.userId)
+  if (!saved.token || !saved.userId) {
+    await invalidateBiometrics("invalid");
     throw new BiometricPasswordRequiredError(
       "The saved sign-in on this iPhone cannot be read or is invalid. Sign in with your password.",
       "invalid",
     );
+  }
   setToken(saved.token, saved.userId);
   const restoredVersion = currentSession().version;
   let mismatchedAccount = false;
@@ -145,6 +219,8 @@ export async function signInWithBiometrics(
       api<Account>("/auth/me", {
         signal: controller.signal,
         cache: "no-store",
+        // This flow owns rejection cleanup; do not dispatch a second global sign-out.
+        notifyUnauthorized: false,
       }),
       deadline,
     ]);
@@ -159,10 +235,10 @@ export async function signInWithBiometrics(
     const sameSession = currentSession().version === restoredVersion;
     if (sameSession) setToken(null);
     if (
-      mismatchedAccount ||
-      (error instanceof ApiError && error.status === 401)
+      sameSession &&
+      (mismatchedAccount || (error instanceof ApiError && error.status === 401))
     ) {
-      await clearBiometrics();
+      await invalidateBiometrics(mismatchedAccount ? "invalid" : "rejected");
       throw new BiometricPasswordRequiredError(
         mismatchedAccount
           ? "The saved sign-in does not match the server account. Sign in with your password."

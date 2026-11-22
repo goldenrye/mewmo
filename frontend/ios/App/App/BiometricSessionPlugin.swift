@@ -10,6 +10,12 @@ private struct BiometricSession: Codable {
     let server: String
 }
 
+private enum BiometricPreferencePolicy {
+    static func keepEnabled(enabled: Bool, preserve: Bool, owner: String?, userId: String?) -> Bool {
+        enabled && preserve && (userId == nil || owner == userId)
+    }
+}
+
 @objc(MewmoBiometricsPlugin)
 public class BiometricSessionPlugin: CAPPlugin, CAPBridgedPlugin {
     public let identifier = "MewmoBiometricsPlugin"
@@ -45,6 +51,10 @@ public class BiometricSessionPlugin: CAPPlugin, CAPBridgedPlugin {
         "mewmo.biometric.enabled." + key(server)
     }
 
+    private func credentialState(_ server: String) -> String {
+        UserDefaults.standard.string(forKey: preference(server) + ".session") ?? "unchecked"
+    }
+
     private func query(_ server: String) -> [String: Any] {
         [
             kSecClass as String: kSecClassGenericPassword,
@@ -62,8 +72,10 @@ public class BiometricSessionPlugin: CAPPlugin, CAPBridgedPlugin {
             let label = context.biometryType == .touchID ? "Touch ID" : "Face ID"
             call.resolve([
                 "available": available,
-                // Only an opt-in flag is outside Keychain; it never authorizes sign-in.
+                // Non-secret preference metadata never authorizes sign-in.
                 "enabled": UserDefaults.standard.bool(forKey: self.preference(server)),
+                // This is a local renewal hint, never proof that the server accepts a session.
+                "sessionState": self.credentialState(server),
                 "label": label
             ])
         }
@@ -102,7 +114,7 @@ public class BiometricSessionPlugin: CAPPlugin, CAPBridgedPlugin {
                     call.reject("Could not replace the saved session.", "STORAGE_FAILED")
                     return
                 }
-                UserDefaults.standard.set(false, forKey: self.preference(server))
+                UserDefaults.standard.set("missing", forKey: self.preference(server) + ".session")
                 var attributes = self.query(server)
                 attributes[kSecAttrAccessControl as String] = access
                 attributes[kSecValueData as String] = data
@@ -112,6 +124,8 @@ public class BiometricSessionPlugin: CAPPlugin, CAPBridgedPlugin {
                     return
                 }
                 UserDefaults.standard.set(true, forKey: self.preference(server))
+                UserDefaults.standard.set(userId, forKey: self.preference(server) + ".owner")
+                UserDefaults.standard.set("unchecked", forKey: self.preference(server) + ".session")
                 call.resolve()
             }
         }
@@ -132,7 +146,7 @@ public class BiometricSessionPlugin: CAPPlugin, CAPBridgedPlugin {
             let status = SecItemCopyMatching(request as CFDictionary, &result)
             guard status == errSecSuccess else {
                 if status == errSecItemNotFound {
-                    UserDefaults.standard.set(false, forKey: self.preference(server))
+                    UserDefaults.standard.set("missing", forKey: self.preference(server) + ".session")
                     call.reject("Sign in with your password and enable Face ID again.", "MISSING_SESSION")
                 } else if status == errSecUserCanceled {
                     call.reject("Sign-in cancelled. Try again or use your password.", "CANCELLED")
@@ -144,22 +158,44 @@ public class BiometricSessionPlugin: CAPPlugin, CAPBridgedPlugin {
             guard let data = result as? Data,
                   let session = try? JSONDecoder().decode(BiometricSession.self, from: data),
                   session.server == server else {
+                UserDefaults.standard.set("invalid", forKey: self.preference(server) + ".session")
                 call.reject("The saved session could not be read. Use your password.", "INVALID_SESSION")
                 return
             }
+            // Bind preferences from older app versions only after a protected Keychain read.
+            UserDefaults.standard.set(session.userId, forKey: self.preference(server) + ".owner")
             call.resolve(["token": session.token, "userId": session.userId])
         }
     }
 
     @objc func clear(_ call: CAPPluginCall) {
         guard let server = server(call) else { return }
+        let preserve = call.getBool("preservePreference") ?? false
+        let userId = call.getString("userId")
+        let reason = call.getString("reason") ?? "missing"
+        guard ["missing", "invalid", "rejected"].contains(reason) else {
+            call.reject("Invalid saved-session state.", "INVALID_SESSION")
+            return
+        }
         queue.async {
             let status = SecItemDelete(self.query(server) as CFDictionary)
             guard status == errSecSuccess || status == errSecItemNotFound else {
                 call.reject("Could not remove the saved session. Please try again.", "STORAGE_FAILED")
                 return
             }
-            UserDefaults.standard.set(false, forKey: self.preference(server))
+            let preference = self.preference(server)
+            let owner = UserDefaults.standard.string(forKey: preference + ".owner")
+            let keepPreference = BiometricPreferencePolicy.keepEnabled(
+                enabled: UserDefaults.standard.bool(forKey: preference),
+                preserve: preserve, owner: owner, userId: userId
+            )
+            if keepPreference {
+                UserDefaults.standard.set(reason, forKey: preference + ".session")
+            } else {
+                UserDefaults.standard.set(false, forKey: preference)
+                UserDefaults.standard.removeObject(forKey: preference + ".owner")
+                UserDefaults.standard.removeObject(forKey: preference + ".session")
+            }
             call.resolve()
         }
     }

@@ -134,7 +134,11 @@ it("clears expired or revoked credentials and requires a password", async () => 
     "may be expired or revoked",
   );
   expect(auth.currentSession().token).toBeNull();
-  expect(mocks.clear).toHaveBeenCalledWith({ server });
+  expect(mocks.clear).toHaveBeenCalledWith({
+    server,
+    preservePreference: true,
+    reason: "rejected",
+  });
 });
 
 it("keeps protected credentials for retry after a network failure", async () => {
@@ -443,4 +447,83 @@ it("identifies incomplete local credentials as invalid without contacting the se
     reason: "invalid",
   });
   expect(fetch).not.toHaveBeenCalled();
+});
+
+it("retains enabled preference separately from a rejected credential", async () => {
+  mocks.status.mockResolvedValue({
+    available: true,
+    enabled: true,
+    label: "Face ID",
+    sessionState: "rejected",
+  });
+  const status = await biometric.biometricStatus();
+  expect(status.enabled).toBe(true);
+  expect(biometric.biometricNeedsRenewal(status)).toBe(true);
+  expect(
+    biometric.biometricNeedsRenewal({ ...status, sessionState: "unchecked" }),
+  ).toBe(false);
+  expect(
+    biometric.biometricNeedsRenewal({ ...status, sessionState: undefined }),
+  ).toBe(false);
+  expect(fetch).not.toHaveBeenCalled();
+});
+
+it("bounds a stalled initial status check and permits an explicit retry", async () => {
+  vi.useFakeTimers();
+  mocks.status.mockImplementationOnce(() => new Promise(() => {}));
+  const pending = biometric.biometricStatus();
+  const rejected = expect(pending).rejects.toThrow(
+    "Could not check biometric status",
+  );
+  await vi.advanceTimersByTimeAsync(5000);
+  await rejected;
+  expect(mocks.clear).not.toHaveBeenCalled();
+  await expect(biometric.biometricStatus()).resolves.toMatchObject({
+    enabled: true,
+  });
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+it("keeps a rejected status check retryable without clearing the preference", async () => {
+  mocks.status.mockRejectedValueOnce(new Error("Native status failed"));
+  await expect(biometric.biometricStatus()).rejects.toThrow(
+    "Native status failed",
+  );
+  await expect(biometric.biometricStatus()).resolves.toMatchObject({
+    enabled: true,
+  });
+  expect(mocks.clear).not.toHaveBeenCalled();
+});
+
+it("uses account-bound invalidation after password sign-in but explicit clear opts out", async () => {
+  await biometric.invalidateBiometrics("missing", user.id);
+  expect(mocks.clear).toHaveBeenLastCalledWith({
+    server,
+    preservePreference: true,
+    reason: "missing",
+    userId: user.id,
+  });
+  await biometric.clearBiometrics();
+  expect(mocks.clear).toHaveBeenLastCalledWith({ server });
+});
+
+it("does not apply queued invalidation to a newer account", async () => {
+  const pending = biometric.invalidateBiometrics("rejected");
+  auth.setToken("bob-token", "bob-id");
+  await pending;
+  expect(mocks.clear).not.toHaveBeenCalled();
+});
+
+it("handles biometric verification rejection without dispatching global sign-out", async () => {
+  const unauthorized = vi.fn();
+  window.addEventListener("mewmo:unauthorized", unauthorized);
+  vi.mocked(fetch).mockResolvedValueOnce(new Response("{}", { status: 401 }));
+  await expect(biometric.signInWithBiometrics()).rejects.toMatchObject({
+    reason: "rejected",
+  });
+  expect(unauthorized).not.toHaveBeenCalled();
+  expect(mocks.clear).toHaveBeenCalledTimes(1);
+  expect(vi.mocked(fetch).mock.calls[0][1]).not.toHaveProperty(
+    "notifyUnauthorized",
+  );
 });
