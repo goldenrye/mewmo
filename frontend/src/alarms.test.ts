@@ -223,6 +223,137 @@ it("discards work queued for a signed-out account", async () => {
   expect(mocks.bind.mock.lastCall?.[0]).toEqual({ owner: null });
 });
 
+it("suspends expired-session work without resetting native alarms or preferences", async () => {
+  await alarms.bindAlarmAccount("alice", "https://mewmo.example/api");
+  await alarms.authorizeAlarms();
+  const epoch = alarms.alarmEpoch();
+  const revision = alarms.alarmRevision();
+  mocks.bind.mockClear();
+  alarms.suspendAlarmAccount();
+  expect(alarms.alarmEpoch()).toBeGreaterThan(epoch);
+  expect(alarms.alarmRevision()).toBeGreaterThan(revision);
+  expect(alarms.alarmSnapshot()).toEqual(unavailable);
+  await alarms.syncAlarms([]);
+  await alarms.authorizeAlarms();
+  await alarms.disableAlarms();
+  expect(mocks.bind).not.toHaveBeenCalled();
+  expect(mocks.sync).not.toHaveBeenCalled();
+  expect(mocks.disable).not.toHaveBeenCalled();
+  expect(mocks.authorize).toHaveBeenCalledTimes(1);
+  await expect(
+    alarms.syncAlarms([item], { expectedEpoch: epoch }),
+  ).rejects.toThrow("Account changed");
+});
+
+it("resumes the same native owner after renewal without enabling or clearing alarms", async () => {
+  await alarms.bindAlarmAccount("alice", "https://mewmo.example/api");
+  const epoch = alarms.alarmEpoch();
+  const revision = alarms.alarmRevision();
+  alarms.suspendAlarmAccount();
+  mocks.bind.mockResolvedValue(enabled);
+  await alarms.bindAlarmAccount("alice", "https://mewmo.example/api");
+  expect(alarms.alarmSnapshot().enabled).toBe(true);
+  await expect(
+    alarms.syncAlarms([], { complete: true, expectedEpoch: epoch }),
+  ).rejects.toThrow("Account changed");
+  await alarms.syncAlarms([], { complete: true, expectedRevision: revision });
+  expect(mocks.sync).not.toHaveBeenCalled();
+  await alarms.syncAlarms([item], {
+    complete: true,
+    expectedEpoch: alarms.alarmEpoch(),
+  });
+  expect(mocks.sync).toHaveBeenCalledTimes(1);
+  expect(mocks.bind.mock.calls.map(([call]) => call.owner)).toEqual([
+    "https://mewmo.example/api#alice",
+    "https://mewmo.example/api#alice",
+  ]);
+  expect(mocks.authorize).not.toHaveBeenCalled();
+  expect(mocks.disable).not.toHaveBeenCalled();
+});
+
+it("still binds a new owner and explicitly clears on sign-out after expiry", async () => {
+  await alarms.bindAlarmAccount("alice", "https://mewmo.example/api");
+  alarms.suspendAlarmAccount();
+  await alarms.bindAlarmAccount("bob", "https://mewmo.example/api");
+  expect(mocks.bind.mock.lastCall?.[0].owner).toBe(
+    "https://mewmo.example/api#bob",
+  );
+  expect(alarms.alarmSnapshot().enabled).toBe(false);
+  alarms.suspendAlarmAccount();
+  await alarms.bindAlarmAccount(null);
+  expect(mocks.bind.mock.lastCall?.[0].owner).toBeNull();
+});
+
+it("keeps an intentionally disabled alarm preference disabled after renewal", async () => {
+  await alarms.bindAlarmAccount("alice");
+  await alarms.disableAlarms();
+  alarms.suspendAlarmAccount();
+  await alarms.bindAlarmAccount("alice");
+  expect(alarms.alarmSnapshot().enabled).toBe(false);
+  expect(mocks.authorize).not.toHaveBeenCalled();
+  expect(mocks.bind.mock.calls.map(([call]) => call.owner)).toEqual([
+    "#alice",
+    "#alice",
+  ]);
+});
+
+it("discards queued alarm mutations when the session expires", async () => {
+  await alarms.bindAlarmAccount("alice");
+  const pending = alarms.syncAlarms([item]);
+  const rejected = expect(pending).rejects.toThrow("Account changed");
+  alarms.suspendAlarmAccount();
+  await rejected;
+  expect(mocks.sync).not.toHaveBeenCalled();
+  expect(mocks.bind).toHaveBeenCalledTimes(1);
+});
+
+it("does not publish an already-dispatched native result after expiry", async () => {
+  await alarms.bindAlarmAccount("alice");
+  let finish!: (result: typeof enabled) => void;
+  mocks.sync.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const pending = alarms.syncAlarms([item]);
+  const rejected = expect(pending).rejects.toThrow("Account changed");
+  await vi.waitFor(() => expect(mocks.sync).toHaveBeenCalled());
+  alarms.suspendAlarmAccount();
+  finish(enabled);
+  await rejected;
+  expect(alarms.alarmSnapshot()).toEqual(unavailable);
+  expect(mocks.bind).toHaveBeenCalledTimes(1);
+});
+
+it.each(["sync", "authorize", "disable"] as const)(
+  "does not begin %s after expiry during a binding retry",
+  async (operation) => {
+    mocks.bind.mockRejectedValueOnce(new Error("temporary bridge error"));
+    await expect(alarms.bindAlarmAccount("alice")).rejects.toThrow();
+    let finish!: (result: typeof enabled) => void;
+    mocks.bind.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const pending =
+      operation === "sync"
+        ? alarms.syncAlarms([item])
+        : operation === "authorize"
+          ? alarms.authorizeAlarms()
+          : alarms.disableAlarms();
+    const rejected = expect(pending).rejects.toThrow("Account changed");
+    await vi.waitFor(() => expect(mocks.bind).toHaveBeenCalledTimes(2));
+    alarms.suspendAlarmAccount();
+    finish(enabled);
+    await rejected;
+    expect(mocks[operation]).not.toHaveBeenCalled();
+    expect(alarms.alarmSnapshot()).toEqual(unavailable);
+  },
+);
+
 it("reports native failure instead of claiming an alarm is scheduled", async () => {
   await alarms.bindAlarmAccount("alice");
   mocks.sync.mockRejectedValueOnce(new Error("private native failure"));

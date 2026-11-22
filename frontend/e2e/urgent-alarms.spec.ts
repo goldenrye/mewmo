@@ -53,14 +53,28 @@ async function nativeUI(page: Page, mode = "success") {
       contentType: "application/javascript",
       body: `
       let state = {available:true,authorization:"notDetermined",enabled:false,states:{}};
+      let owner = null;
       const listeners = new Set();
-      const emit = () => { state = {...state}; listeners.forEach(fn=>fn()); return state; };
+      const emit = () => {
+        state = {...state};
+        window.nativeAlarmState = structuredClone(state);
+        listeners.forEach(fn=>fn()); return state;
+      };
       export const alarmSnapshot = () => state;
       export const alarmEpoch = () => 1;
       export const alarmRevision = () => 1;
       export const subscribeAlarms = fn => {listeners.add(fn);return ()=>listeners.delete(fn);};
-      export const bindAlarmAccount = async () => emit();
-      export const disableAlarms = async () => { state.enabled=false;state.states={};return emit(); };
+      export const bindAlarmAccount = async (userId, server="") => {
+        const next = userId ? server+"#"+userId : null;
+        window.alarmCalls.push({kind:"bind",owner:next});
+        if(next!==owner || next===null) {state.enabled=false;state.states={};}
+        owner=next; return emit();
+      };
+      export const suspendAlarmAccount = () => {window.alarmCalls.push({kind:"suspend"});};
+      export const disableAlarms = async () => {
+        window.alarmCalls.push({kind:"disable"});
+        state.enabled=false;state.states={};return emit();
+      };
       export const authorizeAlarms = async () => {
         window.alarmCalls.push({kind:"authorize"});
         if(window.alarmMode==="denied") throw Error("Allow alarms in iPhone Settings, or turn off Urgent alarm.");
@@ -68,6 +82,7 @@ async function nativeUI(page: Page, mode = "success") {
       };
       export const syncAlarms = async (items,options={}) => {
         window.alarmCalls.push({kind:"sync",items,options});
+        if(!state.enabled) return emit();
         for(const item of items) {
           state.states[item.id] = item.urgent && item.status==="open"
             ? window.alarmMode==="failed" ? "failed" : "scheduled" : "cancelled";
@@ -82,6 +97,157 @@ async function nativeUI(page: Page, mode = "success") {
     `,
     }),
   );
+}
+
+for (const language of ["en", "zh-CN"]) {
+  for (const switchAccount of [false, true]) {
+    test(`expiry preserves alarms; ${switchAccount ? "different" : "same"} account login applies ownership (${language})`, async ({
+      page,
+      request,
+    }) => {
+      const zh = language !== "en";
+      let username = "admin";
+      let password = "mewmo-local-test";
+      await request.post("/api/auth/login", { data: { username, password } });
+      if (switchAccount) {
+        const invitation = await (
+          await request.post("/api/admin/invitations")
+        ).json();
+        username = "alarm-" + crypto.randomUUID().slice(0, 8);
+        password = "alarm-test-password";
+        const registered = await request.post("/api/auth/register", {
+          data: {
+            username,
+            password,
+            display_name: "Alarm guest",
+            invite_token: new URL(invitation.url).hash.slice("#invite=".length),
+          },
+        });
+        expect(registered.status()).toBe(201);
+      }
+      await nativeUI(page);
+      await login(page, language);
+      const dialog = await draft(page, language);
+      await dialog
+        .getByRole("checkbox", {
+          name: zh ? "紧急闹钟" : "Urgent alarm",
+          exact: true,
+        })
+        .check();
+      const response = page.waitForResponse(
+        (r) =>
+          r.url().endsWith("/api/items") && r.request().method() === "POST",
+      );
+      await dialog
+        .getByRole("button", { name: zh ? "确认并保存" : "Confirm & save" })
+        .click();
+      const item = await (await response).json();
+      try {
+        await expect(
+          page.locator('[data-alarm="due"]').getByRole("status"),
+        ).toContainText(zh ? "已在此 iPhone" : "Alarm scheduled");
+        await page
+          .getByRole("button", { name: zh ? "关闭详情" : "Close details" })
+          .click();
+        const before = await page.evaluate(
+          () => (window as any).nativeAlarmState,
+        );
+        expect(before.enabled).toBe(true);
+        expect(before.states[item.id]).toBe("scheduled");
+        await page.route("**/api/items*", (route) =>
+          route.fulfill({
+            status: 401,
+            contentType: "application/json",
+            body: '{"detail":"Please sign in"}',
+          }),
+        );
+        await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+        await expect(
+          page.getByRole("heading", {
+            name: zh ? "欢迎使用 Mewmo" : "Welcome to Mewmo",
+          }),
+        ).toBeVisible();
+        expect(
+          await page.evaluate(() => (window as any).nativeAlarmState),
+        ).toEqual(before);
+        expect(
+          await page.evaluate(() =>
+            (window as any).alarmCalls.some(
+              (call: any) =>
+                call.kind === "disable" ||
+                (call.kind === "bind" && call.owner === null),
+            ),
+          ),
+        ).toBe(false);
+        expect(
+          await page.evaluate(() =>
+            (window as any).alarmCalls.some(
+              (call: any) => call.kind === "suspend",
+            ),
+          ),
+        ).toBe(true);
+        await page.unroute("**/api/items*");
+        await page
+          .getByLabel(zh ? "用户名" : "Username", { exact: true })
+          .fill(username);
+        await page
+          .getByLabel(zh ? "密码" : "Your password", { exact: true })
+          .fill(password);
+        await page
+          .getByRole("button", { name: zh ? "登录" : "Sign in", exact: true })
+          .click();
+        await expect(
+          page.getByRole("heading", {
+            name: zh ? "首页" : "Overview",
+            exact: true,
+          }),
+        ).toBeVisible();
+        const after = await page.evaluate(
+          () => (window as any).nativeAlarmState,
+        );
+        expect(after.enabled).toBe(!switchAccount);
+        expect(after.states[item.id]).toBe(
+          switchAccount ? undefined : "scheduled",
+        );
+        expect(
+          await page.evaluate(
+            () =>
+              (window as any).alarmCalls.filter(
+                (call: any) => call.kind === "authorize",
+              ).length,
+          ),
+        ).toBe(1);
+        await page
+          .getByRole("button", { name: zh ? "设置" : "Settings", exact: true })
+          .filter({ visible: true })
+          .click();
+        await page
+          .getByRole("button", {
+            name: zh ? "退出登录" : "Sign out",
+            exact: true,
+          })
+          .filter({ visible: true })
+          .last()
+          .click();
+        await expect(
+          page.getByRole("heading", {
+            name: zh ? "欢迎使用 Mewmo" : "Welcome to Mewmo",
+          }),
+        ).toBeVisible();
+        expect(
+          await page.evaluate(() => (window as any).nativeAlarmState.enabled),
+        ).toBe(false);
+        expect(
+          await page.evaluate(() => (window as any).nativeAlarmState.states),
+        ).toEqual({});
+      } finally {
+        await request.post("/api/auth/login", {
+          data: { username: "admin", password: "mewmo-local-test" },
+        });
+        await request.delete(`/api/items/${item.id}`);
+      }
+    });
+  }
 }
 
 for (const language of ["en", "zh-CN"]) {

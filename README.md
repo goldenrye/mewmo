@@ -422,6 +422,8 @@ After saving, check the item's **At the due time** and **1 hour before** statuse
 
 **Notifications > Urgent alarms** enables or disables alarms on this iPhone. Disabling cancels local alarms without clearing items' urgent flags. Completion, deletion, turning urgency off, or changing a due time updates local alarms after a successful sync; undo only restores future alarms. Sign-out and account switching cancel local alarms. A cleanup error is shown explicitly because old alarms may still ring; retry after resolving the error. Native storage keeps the account/server binding, IDs, due times, and fingerprints; the OS-managed alarm contains the same amount-redacted title used for push.
 
+Ordinary session expiry/rejection does **not** turn off urgent alarms or cancel their scheduled alerts. It locks the app and suspends client alarm updates, discarding queued work and stale responses without clearing the native account binding or preference. An already-dispatched native operation may finish. Signing back into the same account resumes synchronization without another alarm opt-in; signing into a different account/server still clears the previous owner's alarms. While signed out by expiry, local alarms may still ring and remote edits cannot be applied until authenticated synchronization resumes. Explicit sign-out and device-alarm disable remain destructive cleanup actions.
+
 Web and older-iPhone clients use **ordinary notifications only**. A web-created urgent reminder becomes a local iPhone alarm only after that phone signs in and syncs with alarm access enabled. Each enabled iPhone schedules independently. Changes made elsewhere, including completion or deletion, cannot instantly recall an offline phone's alarm: open Mewmo on that phone and sync. Once scheduled, the local alarm does not depend on the server worker or APNs connection.
 
 Alarm and push can both alert at the one-hour and due-time offsets. The 7-day and 1-day alerts are ordinary push notifications, not AlarmKit alarms. Ordinary push cannot bypass Silent mode and follows normal worker/retry timing. No Critical Alerts entitlement, new APNs key, or APNs configuration change is required.
@@ -437,6 +439,7 @@ Before relying on a release, test on a physical iOS 26+ iPhone:
 - Check actual volume and stop behavior; verify stopping leaves the item open and routine sync does not recreate a dismissed alarm.
 - Create an event just over one hour away; verify the early traditional alarm rings, dismiss it, and confirm the due-time alarm remains scheduled. For an event under one hour away, confirm no late early alarm is created.
 - Edit, complete, undo, delete, disable device alarms, sign out, and switch accounts; verify old alarms are cancelled and future replacements are correct.
+- Expire a session with alarms scheduled: verify they still ring, same-account sign-in retains the enabled preference, and signing into a different account cancels the previous owner's alarms. Repeat with device alarms disabled to confirm renewal does not enable them.
 - Change an item from the web while the phone is offline, then reopen/sync; verify the documented stale-alarm limitation and subsequent cancellation.
 - Test revoked permission, native scheduling failure/limits, older iOS, and ordinary push fallback independently.
 

@@ -36,6 +36,7 @@ import {
   alarmRevision,
   bindAlarmAccount,
   disableAlarms,
+  suspendAlarmAccount,
   syncAlarms,
 } from "./alarms";
 import {
@@ -643,13 +644,14 @@ export default function App() {
   const clearAccount = useCallback((reason?: "rejected") => {
     const hadSession = !!currentSession().token || !!currentSession().userId;
     setToken(null);
-    void bindAlarmAccount(null).catch(() => {});
+    if (reason) suspendAlarmAccount();
+    else void bindAlarmAccount(null).catch(() => {});
     setAccount(null);
     if (!reason || hadSession)
       void (reason ? invalidateBiometrics(reason) : clearBiometrics()).catch(
         () => {},
       );
-    void clearDisplayedNotifications();
+    if (!reason) void clearDisplayedNotifications();
   }, []);
   useEffect(() => {
     let live = true;
@@ -795,6 +797,7 @@ function Workspace({
   }, [page]);
   const refresh = useCallback(async () => {
     const revision = alarmRevision();
+    const epoch = alarmEpoch();
     const [open, history, registered] = await Promise.all([
       api<Item[]>("/items"),
       api<Item[]>("/items?history=true"),
@@ -806,6 +809,7 @@ function Workspace({
     await syncAlarms(open, {
       complete: true,
       expectedRevision: revision,
+      expectedEpoch: epoch,
     }).catch(() => {});
   }, []);
   useEffect(() => {

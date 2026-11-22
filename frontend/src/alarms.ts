@@ -58,20 +58,31 @@ function supported() {
     Capacitor.isPluginAvailable("MewmoUrgentAlarms")
   );
 }
-async function ensureBound(target: string) {
+async function withBoundOwner(
+  target: string,
+  version: number,
+  work: () => Promise<AlarmSnapshot>,
+) {
   if (boundOwner !== target) {
     await bridge.bind({ owner: target });
+    if (version !== epoch)
+      throw new Error("Account changed. Request discarded.");
     boundOwner = target;
   }
+  if (version !== epoch) throw new Error("Account changed. Request discarded.");
+  return work();
 }
-function queue(work: () => Promise<AlarmSnapshot>, version = epoch) {
+function queue(
+  work: (version: number) => Promise<AlarmSnapshot>,
+  version = epoch,
+) {
   const task = tail
     .catch(() => {})
     .then(async () => {
       if (version !== epoch)
         throw new Error("Account changed. Request discarded.");
       try {
-        const result = await work();
+        const result = await work(version);
         if (version !== epoch)
           throw new Error("Account changed. Request discarded.");
         publish(result);
@@ -86,6 +97,15 @@ function queue(work: () => Promise<AlarmSnapshot>, version = epoch) {
   return task;
 }
 
+export function suspendAlarmAccount() {
+  // Lock the JS session without unbinding or cancelling the native owner's alarms.
+  owner = null;
+  boundOwner = undefined;
+  epoch++;
+  revision++;
+  publish(unavailable);
+}
+
 export function bindAlarmAccount(userId: string | null, server = "") {
   owner = userId ? `${server}#${userId}` : null;
   boundOwner = undefined;
@@ -94,9 +114,9 @@ export function bindAlarmAccount(userId: string | null, server = "") {
   publish(unavailable);
   if (!supported()) return Promise.resolve(unavailable);
   const target = owner;
-  return queue(async () => {
+  return queue(async (version) => {
     const result = await bridge.bind({ owner: target });
-    boundOwner = target;
+    if (version === epoch) boundOwner = target;
     return result;
   });
 }
@@ -104,10 +124,9 @@ export function bindAlarmAccount(userId: string | null, server = "") {
 export async function authorizeAlarms() {
   const target = owner;
   if (!target || !supported()) return unavailable;
-  const result = await queue(async () => {
-    await ensureBound(target);
-    return bridge.authorize({ owner: target });
-  });
+  const result = await queue((version) =>
+    withBoundOwner(target, version, () => bridge.authorize({ owner: target })),
+  );
   if (result.available && result.authorization !== "authorized") {
     throw new Error(
       "Allow alarms in iPhone Settings, or turn off Urgent alarm.",
@@ -120,10 +139,9 @@ export function disableAlarms() {
   const target = owner;
   if (!target || !supported()) return Promise.resolve(unavailable);
   revision++;
-  return queue(async () => {
-    await ensureBound(target);
-    return bridge.disable({ owner: target });
-  });
+  return queue((version) =>
+    withBoundOwner(target, version, () => bridge.disable({ owner: target })),
+  );
 }
 
 export function syncAlarms(
@@ -166,20 +184,21 @@ export function syncAlarms(
         fireAt: new Date(item.due_at).getTime() / 1000 - 3600,
       })),
   );
-  return queue(async () => {
+  return queue(async (version) => {
     // A list requested before an edit must not undo the newly scheduled alarm.
     if (options.complete && expected !== revision) return snapshot;
     if (records.some((item) => !Number.isFinite(item.fireAt)))
       throw new Error(failure);
     // Retry failed account cleanup before allowing any new native scheduling.
-    await ensureBound(target);
-    return bridge.sync({
-      owner: target,
-      items: records,
-      complete: options.complete === true,
-      force: options.force === true,
-      language: getLocale(),
-    });
+    return withBoundOwner(target, version, () =>
+      bridge.sync({
+        owner: target,
+        items: records,
+        complete: options.complete === true,
+        force: options.force === true,
+        language: getLocale(),
+      }),
+    );
   });
 }
 
